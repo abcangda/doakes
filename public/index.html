@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>alt graph</title>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body style="margin:0;background:#111">
+<div id="g" style="width:100vw;height:100vh"></div>
+
+<script>
+fetch("/graph")
+.then(r=>r.json())
+.then(edges=>{
+
+  const nodes=new Set();
+
+  const e=edges.map(x=>{
+    nodes.add(x.a);
+    nodes.add(x.b);
+    return {from:x.a,to:x.b,value:x.weight};
+  });
+
+  const n=[...nodes].map(x=>({id:x,label:x.slice(0,6)}));
+
+  new vis.Network(document.getElementById("g"),{
+    nodes:n,
+    edges:e
+  },{
+    physics:true
+  });
+
+});
+</script>
+</body>
+</html>
