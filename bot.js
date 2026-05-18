@@ -6,16 +6,14 @@ const {
   Routes
 } = require("discord.js");
 
-// ================= ENV =================
+// ================= CONFIG =================
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 // ================= CLIENT =================
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 // ================= COMMANDS =================
@@ -45,7 +43,7 @@ const commands = [
         .setDescription("segundo usuario")
         .setRequired(true)
     )
-].map(cmd => cmd.toJSON());
+].map(c => c.toJSON());
 
 // ================= READY =================
 client.once("ready", async () => {
@@ -59,8 +57,7 @@ client.once("ready", async () => {
       { body: commands }
     );
 
-    console.log("slash commands registrados");
-
+    console.log("slash commands registrados correctamente");
   } catch (err) {
     console.error("error registrando comandos:", err);
   }
@@ -70,23 +67,41 @@ client.once("ready", async () => {
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === "alt") {
-    const user = interaction.options.getUser("usuario");
+  try {
 
-    return interaction.reply({
-      content: `analizando usuario: ${user.tag}`,
-      ephemeral: true
-    });
-  }
+    if (interaction.commandName === "alt") {
+      const user = interaction.options.getUser("usuario");
 
-  if (interaction.commandName === "compare") {
-    const u1 = interaction.options.getUser("u1");
-    const u2 = interaction.options.getUser("u2");
+      await interaction.deferReply();
 
-    return interaction.reply({
-      content: `comparando ${u1.tag} vs ${u2.tag}`,
-      ephemeral: true
-    });
+      await new Promise(r => setTimeout(r, 1000));
+
+      return interaction.editReply(
+        `analizando usuario: ${user.tag}`
+      );
+    }
+
+    if (interaction.commandName === "compare") {
+      const u1 = interaction.options.getUser("u1");
+      const u2 = interaction.options.getUser("u2");
+
+      await interaction.deferReply();
+
+      await new Promise(r => setTimeout(r, 1000));
+
+      return interaction.editReply(
+        `comparando ${u1.tag} vs ${u2.tag}`
+      );
+    }
+
+  } catch (err) {
+    console.error(err);
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply("error ejecutando comando");
+    } else {
+      await interaction.reply("error ejecutando comando");
+    }
   }
 });
 
