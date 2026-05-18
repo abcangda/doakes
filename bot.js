@@ -28,10 +28,12 @@ const commands = [
     )
 ].map(cmd => cmd.toJSON());
 
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+client.once("ready", async () => {
+  console.log("bot online como:", client.user.tag);
 
-(async () => {
   try {
+    const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+
     await rest.put(
       Routes.applicationCommands(process.env.CLIENT_ID),
       { body: commands }
@@ -42,4 +44,4 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   } catch (err) {
     console.error("error registrando comandos:", err);
   }
-})();
+});
