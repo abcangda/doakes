@@ -1,6 +1,5 @@
-
 {
-  "name": "alt-system",
+  "name": "alt-intel-system",
   "version": "1.0.0",
   "main": "bot.js",
   "scripts": {
