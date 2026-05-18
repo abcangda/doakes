@@ -10,36 +10,48 @@ const {
 const express = require("express");
 const Database = require("better-sqlite3");
 
-// ================= CONFIG =================
+// ==================================================
+// CONFIG
+// ==================================================
+
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// ================= DB =================
+// ==================================================
+// DATABASE
+// ==================================================
+
 const db = new Database("db.db");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT,
-  score INTEGER DEFAULT 0
+  score INTEGER DEFAULT 0,
+  lastAnalysis INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   userId TEXT,
-  content TEXT
+  content TEXT,
+  createdAt INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS edges (
   user1 TEXT,
   user2 TEXT,
   weight INTEGER,
-  type TEXT
+  type TEXT,
+  createdAt INTEGER
 );
 `);
 
-// ================= CLIENT =================
+// ==================================================
+// DISCORD CLIENT
+// ==================================================
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -48,201 +60,524 @@ const client = new Client({
   ]
 });
 
-// ================= EXPRESS (GRAFO API) =================
+// ==================================================
+// EXPRESS DASHBOARD
+// ==================================================
+
 const app = express();
 
 app.get("/", (req, res) => {
-  res.send("bot online");
+  res.send("Alt Intelligence System Online.");
 });
 
 app.get("/graph", (req, res) => {
-  const edges = db.prepare("SELECT * FROM edges").all();
+  const edges = db.prepare(`
+    SELECT * FROM edges
+    ORDER BY weight DESC
+  `).all();
+
   res.json(edges);
 });
 
 app.listen(3000, () => {
-  console.log("dashboard online");
+  console.log("Dashboard online.");
 });
 
-// ================= COMMANDS =================
+// ==================================================
+// COMMANDS
+// ==================================================
+
 const commands = [
   new SlashCommandBuilder()
     .setName("alt")
-    .setDescription("analiza usuario")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("usuario").setRequired(true)
+    .setDescription("Analiza un usuario")
+    .addUserOption(option =>
+      option
+        .setName("usuario")
+        .setDescription("Usuario a analizar")
+        .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName("compare")
-    .setDescription("compara usuarios")
-    .addUserOption(o =>
-      o.setName("u1").setDescription("usuario 1").setRequired(true)
+    .setDescription("Compara dos usuarios")
+    .addUserOption(option =>
+      option
+        .setName("u1")
+        .setDescription("Primer usuario")
+        .setRequired(true)
     )
-    .addUserOption(o =>
-      o.setName("u2").setDescription("usuario 2").setRequired(true)
+    .addUserOption(option =>
+      option
+        .setName("u2")
+        .setDescription("Segundo usuario")
+        .setRequired(true)
     )
-].map(c => c.toJSON());
+].map(cmd => cmd.toJSON());
 
-// ================= READY =================
-client.once("ready", async () => {
-  console.log("bot online:", client.user.tag);
+// ==================================================
+// COMMAND REGISTRATION
+// ==================================================
 
+async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
   await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
+    Routes.applicationGuildCommands(
+      CLIENT_ID,
+      GUILD_ID
+    ),
+    {
+      body: commands
+    }
   );
 
-  console.log("commands ready");
+  console.log("Slash commands sincronizados.");
+}
+
+// ==================================================
+// READY
+// ==================================================
+
+client.once("clientReady", async () => {
+  console.log(`Bot online como ${client.user.tag}`);
+
+  await registerCommands();
 });
 
-// ================= MESSAGE TRACKING =================
-client.on("messageCreate", (msg) => {
-  if (msg.author.bot) return;
+// ==================================================
+// MESSAGE TRACKING
+// ==================================================
+
+client.on("messageCreate", message => {
+  if (message.author.bot) return;
 
   db.prepare(`
-    INSERT INTO messages (userId, content)
-    VALUES (?, ?)
-  `).run(msg.author.id, msg.content);
+    INSERT INTO messages (
+      userId,
+      content,
+      createdAt
+    )
+    VALUES (?, ?, ?)
+  `).run(
+    message.author.id,
+    message.content,
+    Date.now()
+  );
 });
 
-// ================= ANALYSIS ENGINE (PRO) =================
+// ==================================================
+// ANALYSIS ENGINE
+// ==================================================
+
 function analyzeUser(user, messages) {
+
   let score = 0;
   let reasons = [];
 
-  const msgCount = messages.length;
+  const messageCount = messages.length;
 
-  const avgLength =
-    msgCount > 0
-      ? messages.reduce((a, m) => a + m.content.length, 0) / msgCount
-      : 0;
+  // ==================================================
+  // ACCOUNT AGE
+  // ==================================================
 
-  const words = messages
-    .map(m => m.content.toLowerCase().split(/\s+/))
-    .flat();
-
-  const uniqueWords = new Set(words).size;
-
-  // edad cuenta
-  const ageDays = user.createdTimestamp
-    ? (Date.now() - user.createdTimestamp) / 86400000
-    : 0;
+  const ageDays =
+    (Date.now() - user.createdTimestamp)
+    / 86400000;
 
   if (ageDays < 7) {
     score += 40;
-    reasons.push("Cuenta muy reciente.");
+    reasons.push("La cuenta fue creada hace muy poco.");
+  }
+  else if (ageDays < 30) {
+    score += 20;
+    reasons.push("La cuenta es relativamente nueva.");
   }
 
-  // actividad
-  if (msgCount > 120) {
+  // ==================================================
+  // MESSAGE ACTIVITY
+  // ==================================================
+
+  if (messageCount > 150) {
     score += 15;
-    reasons.push("Actividad alta de mensajes.");
+    reasons.push("Actividad de mensajes elevada.");
   }
 
-  // escritura simple
+  // ==================================================
+  // WRITING STYLE
+  // ==================================================
+
+  const avgLength =
+    messageCount > 0
+      ? messages.reduce(
+          (a, m) => a + m.content.length,
+          0
+        ) / messageCount
+      : 0;
+
   if (avgLength < 10) {
     score += 10;
-    reasons.push("Mensajes muy cortos.");
+    reasons.push("Mensajes extremadamente cortos.");
   }
 
-  // repetición baja (posible bot/alt)
-  if (uniqueWords / (words.length || 1) < 0.4) {
+  // ==================================================
+  // WORD VARIETY
+  // ==================================================
+
+  const words = messages
+    .flatMap(m =>
+      m.content
+        .toLowerCase()
+        .split(/\s+/)
+    );
+
+  const uniqueWords =
+    new Set(words).size;
+
+  const ratio =
+    uniqueWords /
+    (words.length || 1);
+
+  if (ratio < 0.40) {
     score += 15;
-    reasons.push("Baja variedad de palabras.");
+    reasons.push(
+      "Patrón repetitivo de lenguaje."
+    );
   }
 
-  // username
+  // ==================================================
+  // USERNAME ANALYSIS
+  // ==================================================
+
   if (user.username.length < 4) {
-    score += 20;
-    reasons.push("Username sospechoso.");
+    score += 15;
+    reasons.push(
+      "El username parece sospechoso."
+    );
   }
+
+  // ==================================================
+  // SCORE LIMIT
+  // ==================================================
+
+  if (score > 100) score = 100;
+
+  // ==================================================
+  // RISK LEVEL
+  // ==================================================
 
   let level = "Bajo";
-  if (score >= 70) level = "Alto";
-  else if (score >= 40) level = "Medio";
 
-  return { score, level, reasons, msgCount };
+  if (score >= 70) {
+    level = "Alto";
+  }
+  else if (score >= 40) {
+    level = "Medio";
+  }
+
+  return {
+    score,
+    level,
+    reasons,
+    messageCount
+  };
 }
 
-// ================= GRAPH LINKING =================
-function linkUsers(u1, u2, weight, type) {
+// ==================================================
+// GRAPH SYSTEM
+// ==================================================
+
+function addConnection(
+  user1,
+  user2,
+  weight,
+  type
+) {
+
   db.prepare(`
-    INSERT INTO edges (user1, user2, weight, type)
-    VALUES (?, ?, ?, ?)
-  `).run(u1, u2, weight, type);
+    INSERT INTO edges (
+      user1,
+      user2,
+      weight,
+      type,
+      createdAt
+    )
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    user1,
+    user2,
+    weight,
+    type,
+    Date.now()
+  );
 }
 
-// ================= INTERACTIONS =================
-client.on("interactionCreate", async (i) => {
-  if (!i.isChatInputCommand()) return;
+// ==================================================
+// INTERACTIONS
+// ==================================================
+
+client.on("interactionCreate", async interaction => {
+
+  if (!interaction.isChatInputCommand())
+    return;
 
   try {
 
-    // ================= ALT =================
-    if (i.commandName === "alt") {
-      const user = i.options.getUser("usuario");
+    // ==================================================
+    // /ALT
+    // ==================================================
 
-      await i.deferReply();
+    if (interaction.commandName === "alt") {
 
-      const messages = db.prepare(
-        "SELECT * FROM messages WHERE userId = ?"
-      ).all(user.id);
+      const user =
+        interaction.options.getUser(
+          "usuario"
+        );
 
-      const result = analyzeUser(user, messages);
+      await interaction.deferReply();
+
+      const messages =
+        db.prepare(`
+          SELECT *
+          FROM messages
+          WHERE userId = ?
+        `).all(user.id);
+
+      const analysis =
+        analyzeUser(
+          user,
+          messages
+        );
 
       db.prepare(`
-        INSERT OR REPLACE INTO users (id, username, score)
-        VALUES (?, ?, ?)
-      `).run(user.id, user.username, result.score);
+        INSERT OR REPLACE INTO users (
+          id,
+          username,
+          score,
+          lastAnalysis
+        )
+        VALUES (?, ?, ?, ?)
+      `).run(
+        user.id,
+        user.username,
+        analysis.score,
+        Date.now()
+      );
 
-      const embed = new EmbedBuilder()
-        .setTitle("Análisis avanzado de usuario")
-        .setDescription("Sistema de detección de alts.")
-        .addFields(
-          { name: "Usuario", value: user.tag },
-          { name: "Score", value: `${result.score}/100` },
-          { name: "Nivel", value: result.level },
-          { name: "Mensajes analizados", value: `${result.msgCount}` },
-          { name: "Razones", value: result.reasons.join("\n") || "Ninguna." }
-        );
+      const embed =
+        new EmbedBuilder()
+          .setTitle(
+            "Análisis de usuario"
+          )
+          .setDescription(
+            "Reporte avanzado del sistema."
+          )
+          .addFields(
+            {
+              name: "Usuario",
+              value: user.tag
+            },
+            {
+              name: "Score",
+              value:
+                `${analysis.score}/100`
+            },
+            {
+              name: "Nivel de riesgo",
+              value: analysis.level
+            },
+            {
+              name: "Mensajes analizados",
+              value:
+                `${analysis.messageCount}`
+            },
+            {
+              name: "Razones",
+              value:
+                analysis.reasons.join("\n")
+                || "No se detectaron señales relevantes."
+            }
+          )
+          .setColor(0x2b2d31);
 
-      return i.editReply({ embeds: [embed] });
+      return interaction.editReply({
+        embeds: [embed]
+      });
     }
 
-    // ================= COMPARE =================
-    if (i.commandName === "compare") {
-      const u1 = i.options.getUser("u1");
-      const u2 = i.options.getUser("u2");
+    // ==================================================
+    // /COMPARE
+    // ==================================================
 
-      await i.deferReply();
+    if (interaction.commandName === "compare") {
+
+      const u1 =
+        interaction.options.getUser("u1");
+
+      const u2 =
+        interaction.options.getUser("u2");
+
+      await interaction.deferReply();
 
       let similarity = 0;
+      let reasons = [];
 
-      if (u1.username.slice(0, 4) === u2.username.slice(0, 4)) {
+      // USERNAME SIMILARITY
+
+      if (
+        u1.username
+          .slice(0, 4)
+          .toLowerCase()
+        ===
+        u2.username
+          .slice(0, 4)
+          .toLowerCase()
+      ) {
+
         similarity += 30;
-        linkUsers(u1.id, u2.id, 30, "username");
-      }
 
-      const embed = new EmbedBuilder()
-        .setTitle("Comparación de usuarios")
-        .addFields(
-          { name: "Usuario 1", value: u1.tag },
-          { name: "Usuario 2", value: u2.tag },
-          { name: "Similitud", value: `${similarity}%` }
+        reasons.push(
+          "Coincidencia parcial de username."
         );
 
-      return i.editReply({ embeds: [embed] });
+        addConnection(
+          u1.id,
+          u2.id,
+          30,
+          "username_similarity"
+        );
+      }
+
+      // MESSAGE ANALYSIS
+
+      const m1 =
+        db.prepare(`
+          SELECT *
+          FROM messages
+          WHERE userId = ?
+        `).all(u1.id);
+
+      const m2 =
+        db.prepare(`
+          SELECT *
+          FROM messages
+          WHERE userId = ?
+        `).all(u2.id);
+
+      const avg1 =
+        m1.length
+          ? m1.reduce(
+              (a, m) =>
+                a + m.content.length,
+              0
+            ) / m1.length
+          : 0;
+
+      const avg2 =
+        m2.length
+          ? m2.reduce(
+              (a, m) =>
+                a + m.content.length,
+              0
+            ) / m2.length
+          : 0;
+
+      if (
+        Math.abs(avg1 - avg2) < 6
+      ) {
+
+        similarity += 20;
+
+        reasons.push(
+          "Patrones de escritura similares."
+        );
+
+        addConnection(
+          u1.id,
+          u2.id,
+          20,
+          "writing_pattern"
+        );
+      }
+
+      // LIMIT
+
+      if (similarity > 100)
+        similarity = 100;
+
+      // LEVEL
+
+      let level = "Bajo";
+
+      if (similarity >= 70)
+        level = "Alto";
+
+      else if (similarity >= 40)
+        level = "Medio";
+
+      const embed =
+        new EmbedBuilder()
+          .setTitle(
+            "Comparación de usuarios"
+          )
+          .setDescription(
+            "Análisis avanzado de similitud."
+          )
+          .addFields(
+            {
+              name: "Usuario 1",
+              value: u1.tag
+            },
+            {
+              name: "Usuario 2",
+              value: u2.tag
+            },
+            {
+              name: "Similitud",
+              value:
+                `${similarity}%`
+            },
+            {
+              name: "Nivel",
+              value: level
+            },
+            {
+              name: "Razones",
+              value:
+                reasons.join("\n")
+                || "No se detectaron coincidencias relevantes."
+            }
+          )
+          .setColor(0x2b2d31);
+
+      return interaction.editReply({
+        embeds: [embed]
+      });
     }
 
-  } catch (err) {
+  }
+  catch (err) {
+
     console.error(err);
-    if (i.deferred) return i.editReply("Error interno.");
-    return i.reply("Error interno.");
+
+    if (interaction.deferred) {
+
+      return interaction.editReply({
+        content:
+          "Ocurrió un error interno."
+      });
+
+    }
+
+    return interaction.reply({
+      content:
+        "Ocurrió un error interno."
+    });
   }
 });
 
-// ================= LOGIN =================
+// ==================================================
+// LOGIN
+// ==================================================
+
 client.login(TOKEN);
