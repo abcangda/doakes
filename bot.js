@@ -55,16 +55,17 @@ client.on("messageCreate", msg => {
 // ================= GET MESSAGES =================
 function getMessages(id) {
   return db.prepare(`
-    SELECT content FROM messages
+    SELECT content, timestamp FROM messages
     WHERE user_id = ?
     ORDER BY timestamp DESC
     LIMIT 120
-  `).all(id).map(m => m.content || "");
+  `).all(id);
 }
 
-// ================= IA VECTOR =================
-function vector(msgs) {
-  const text = msgs.join(" ").toLowerCase();
+// ================= PROFILE (INTEL) =================
+function profile(msgs) {
+
+  const text = msgs.map(m => m.content).join(" ").toLowerCase();
 
   const words = text
     .replace(/[^a-z0-9áéíóúñ ]/gi, " ")
@@ -77,29 +78,48 @@ function vector(msgs) {
     freq[w] = (freq[w] || 0) + 1;
   }
 
+  const top = Object.entries(freq)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0, 12)
+    .map(x=>x[0]);
+
+  const avgLen =
+    msgs.reduce((a,m)=>a+m.content.length,0)/(msgs.length||1);
+
+  const caps =
+    (text.match(/[A-Z]/g)||[]).length/(text.length||1);
+
+  const hours = msgs.map(m => new Date(m.timestamp).getHours());
+
+  const freqHours = {};
+  for (const h of hours) freqHours[h]=(freqHours[h]||0)+1;
+
+  const peak = Object.entries(freqHours)
+    .sort((a,b)=>b[1]-a[1])[0]?.[0] || "0";
+
   return {
-    avgLen: msgs.reduce((a, m) => a + m.length, 0) / (msgs.length || 1),
-    unique: Object.keys(freq).length,
-    top: Object.entries(freq)
-      .sort((a,b)=>b[1]-a[1])
-      .slice(0,10)
-      .map(x=>x[0]),
-    caps: (text.match(/[A-Z]/g)||[]).length / (text.length || 1)
+    top,
+    avgLen,
+    caps,
+    peak,
+    unique: Object.keys(freq).length
   };
 }
 
-// ================= SIMILITUD =================
+// ================= SIMILARITY =================
 function similarity(a,b){
-  const A = new Set(a.top);
-  const B = new Set(b.top);
 
-  const inter = [...A].filter(x=>B.has(x));
+  const setA = new Set(a.top);
+  const setB = new Set(b.top);
+
+  const inter = [...setA].filter(x=>setB.has(x));
 
   let s = inter.length / 10;
 
   if (Math.abs(a.avgLen - b.avgLen) < 10) s += 0.2;
-  if (Math.abs(a.unique - b.unique) < 20) s += 0.2;
-  if (Math.abs(a.caps - b.caps) < 0.05) s += 0.1;
+  if (Math.abs(a.caps - b.caps) < 0.05) s += 0.15;
+  if (a.peak === b.peak) s += 0.25;
+  if (Math.abs(a.unique - b.unique) < 20) s += 0.15;
 
   return Math.min(s,1);
 }
@@ -118,29 +138,26 @@ function score(user, other, A, B){
   let s = 0;
   const r = [];
 
+  const p1 = profile(A);
+  const p2 = profile(B);
+
+  const sim = similarity(p1,p2);
+
+  s += sim * 80;
+
+  if(sim > 0.4) r.push("comportamiento similar");
+  if(sim > 0.6) r.push("alta probabilidad de misma persona");
+
   const age = (Date.now()-user.createdTimestamp)/86400000;
 
-  if(age < 7){s+=35;r.push("cuenta muy nueva");}
+  if(age < 7){s+=30;r.push("cuenta muy nueva");}
   else if(age < 30){s+=15;r.push("cuenta reciente");}
-
-  const v1 = vector(A);
-  const v2 = vector(B);
-
-  const sim = similarity(v1,v2);
-
-  s += sim * 70;
-
-  if(sim > 0.4) r.push("estilo similar");
-  if(sim > 0.6) r.push("posible misma persona");
 
   const nameMatch =
     user.username?.slice(0,4).toLowerCase() ===
     other.username?.slice(0,4).toLowerCase();
 
-  if(nameMatch){
-    s += 15;
-    r.push("username similar");
-  }
+  if(nameMatch){s+=15;r.push("username similar");}
 
   s = Math.min(100,Math.round(s));
 
@@ -148,21 +165,21 @@ function score(user, other, A, B){
   if(s >= 70) level = "alto";
   else if(s >= 40) level = "medio";
 
-  return {s,level,r};
+  return {s, level, r};
 }
 
 // ================= EMBED SAFE =================
 function embed(user,res,a,b){
 
   return new EmbedBuilder()
-    .setTitle("analisis de alt (ia)")
+    .setTitle("alt intelligence system")
     .setColor(res.level==="alto"?0xe74c3c:res.level==="medio"?0xf1c40f:0x2ecc71)
     .addFields(
-      {name:"usuario",value:String(user.tag),inline:true},
-      {name:"riesgo",value:`${res.s}%`,inline:true},
-      {name:"nivel",value:res.level,inline:true},
-      {name:"mensajes",value:`${a} vs ${b}`},
-      {name:"razones",value:res.r.length?res.r.join("\n"):"sin señales"}
+      { name:"usuario", value:String(user.tag), inline:true },
+      { name:"riesgo", value:`${res.s}%`, inline:true },
+      { name:"nivel", value:res.level, inline:true },
+      { name:"mensajes analizados", value:`${a.length} vs ${b.length}` },
+      { name:"razones", value:res.r.length ? res.r.join("\n") : "sin señales" }
     )
     .setTimestamp();
 }
@@ -199,19 +216,19 @@ client.on("interactionCreate",async i=>{
 
     const A = getMessages(u.id);
 
-    const other = i.guild.members.cache.find(m=>
-      m.user.id!==u.id &&
-      m.user.username?.slice(0,4).toLowerCase()===
+    const other = i.guild.members.cache.find(m =>
+      m.user.id !== u.id &&
+      m.user.username?.slice(0,4).toLowerCase() ===
       u.username?.slice(0,4).toLowerCase()
     );
 
     const B = other ? getMessages(other.user.id) : [];
 
-    const res = score(u,other||u,A,B);
+    const res = score(u, other || u, A, B);
 
-    if(other) link(u.id,other.user.id,res.s);
+    if(other) link(u.id, other.user.id, res.s);
 
-    return i.reply({embeds:[embed(u,res,A.length,B.length)]});
+    return i.reply({ embeds:[embed(u,res,A,B)] });
   }
 
   if(i.commandName==="compare"){
@@ -222,15 +239,15 @@ client.on("interactionCreate",async i=>{
     const m1=getMessages(u1.id);
     const m2=getMessages(u2.id);
 
-    const v1=vector(m1);
-    const v2=vector(m2);
+    const p1=profile(m1);
+    const p2=profile(m2);
 
-    const sim=similarity(v1,v2)*100;
+    const sim=similarity(p1,p2)*100;
 
     return i.reply({
       embeds:[
         new EmbedBuilder()
-          .setTitle("compare ia")
+          .setTitle("comparison intelligence")
           .setColor(sim>70?0xe74c3c:sim>40?0xf1c40f:0x2ecc71)
           .addFields(
             {name:"u1",value:u1.tag,inline:true},
