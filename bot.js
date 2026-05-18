@@ -31,10 +31,11 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT
 );
 
-CREATE TABLE IF NOT EXISTS relations (
+CREATE TABLE IF NOT EXISTS edges (
   user1 TEXT,
   user2 TEXT,
-  score INTEGER
+  weight INTEGER,
+  type TEXT
 );
 `);
 
@@ -47,30 +48,34 @@ const client = new Client({
   ]
 });
 
-// ================= EXPRESS DASHBOARD =================
+// ================= EXPRESS (GRAFO API) =================
 const app = express();
 
+app.get("/", (req, res) => {
+  res.send("bot online");
+});
+
 app.get("/graph", (req, res) => {
-  const edges = db.prepare("SELECT * FROM relations").all();
+  const edges = db.prepare("SELECT * FROM edges").all();
   res.json(edges);
 });
 
 app.listen(3000, () => {
-  console.log("DASHBOARD ONLINE.");
+  console.log("dashboard online");
 });
 
 // ================= COMMANDS =================
 const commands = [
   new SlashCommandBuilder()
     .setName("alt")
-    .setDescription("analiza posible alt")
+    .setDescription("analiza usuario")
     .addUserOption(o =>
       o.setName("usuario").setDescription("usuario").setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName("compare")
-    .setDescription("compara dos usuarios")
+    .setDescription("compara usuarios")
     .addUserOption(o =>
       o.setName("u1").setDescription("usuario 1").setRequired(true)
     )
@@ -81,7 +86,7 @@ const commands = [
 
 // ================= READY =================
 client.once("ready", async () => {
-  console.log(`BOT ONLINE COMO: ${client.user.tag}`);
+  console.log("bot online:", client.user.tag);
 
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -90,10 +95,10 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  console.log("COMANDOS REGISTRADOS.");
+  console.log("commands ready");
 });
 
-// ================= MESSAGE LOG =================
+// ================= MESSAGE TRACKING =================
 client.on("messageCreate", (msg) => {
   if (msg.author.bot) return;
 
@@ -103,33 +108,71 @@ client.on("messageCreate", (msg) => {
   `).run(msg.author.id, msg.content);
 });
 
-// ================= ANALISIS =================
-function analyze(user, messages) {
+// ================= ANALYSIS ENGINE (PRO) =================
+function analyzeUser(user, messages) {
   let score = 0;
   let reasons = [];
 
   const msgCount = messages.length;
 
-  if (msgCount > 100) {
-    score += 20;
-    reasons.push("ALTA ACTIVIDAD DE MENSAJES.");
-  }
+  const avgLength =
+    msgCount > 0
+      ? messages.reduce((a, m) => a + m.content.length, 0) / msgCount
+      : 0;
 
-  if (user.username.length < 4) {
-    score += 25;
-    reasons.push("USERNAME MUY CORTO O SOSPECHOSO.");
-  }
+  const words = messages
+    .map(m => m.content.toLowerCase().split(/\s+/))
+    .flat();
 
-  if (user.createdTimestamp && Date.now() - user.createdTimestamp < 7 * 86400000) {
+  const uniqueWords = new Set(words).size;
+
+  // edad cuenta
+  const ageDays = user.createdTimestamp
+    ? (Date.now() - user.createdTimestamp) / 86400000
+    : 0;
+
+  if (ageDays < 7) {
     score += 40;
-    reasons.push("CUENTA MUY RECIENTE.");
+    reasons.push("Cuenta muy reciente.");
   }
 
-  let level = "BAJO";
-  if (score >= 70) level = "ALTO";
-  else if (score >= 40) level = "MEDIO";
+  // actividad
+  if (msgCount > 120) {
+    score += 15;
+    reasons.push("Actividad alta de mensajes.");
+  }
 
-  return { score, reasons, level };
+  // escritura simple
+  if (avgLength < 10) {
+    score += 10;
+    reasons.push("Mensajes muy cortos.");
+  }
+
+  // repetición baja (posible bot/alt)
+  if (uniqueWords / (words.length || 1) < 0.4) {
+    score += 15;
+    reasons.push("Baja variedad de palabras.");
+  }
+
+  // username
+  if (user.username.length < 4) {
+    score += 20;
+    reasons.push("Username sospechoso.");
+  }
+
+  let level = "Bajo";
+  if (score >= 70) level = "Alto";
+  else if (score >= 40) level = "Medio";
+
+  return { score, level, reasons, msgCount };
+}
+
+// ================= GRAPH LINKING =================
+function linkUsers(u1, u2, weight, type) {
+  db.prepare(`
+    INSERT INTO edges (user1, user2, weight, type)
+    VALUES (?, ?, ?, ?)
+  `).run(u1, u2, weight, type);
 }
 
 // ================= INTERACTIONS =================
@@ -148,7 +191,7 @@ client.on("interactionCreate", async (i) => {
         "SELECT * FROM messages WHERE userId = ?"
       ).all(user.id);
 
-      const result = analyze(user, messages);
+      const result = analyzeUser(user, messages);
 
       db.prepare(`
         INSERT OR REPLACE INTO users (id, username, score)
@@ -156,13 +199,14 @@ client.on("interactionCreate", async (i) => {
       `).run(user.id, user.username, result.score);
 
       const embed = new EmbedBuilder()
-        .setTitle("ANÁLISIS DE USUARIO")
-        .setDescription("REPORTE DE RIESGO.")
+        .setTitle("Análisis avanzado de usuario")
+        .setDescription("Sistema de detección de alts.")
         .addFields(
-          { name: "USUARIO", value: user.tag },
-          { name: "SCORE", value: `${result.score}/100` },
-          { name: "NIVEL", value: result.level },
-          { name: "RAZONES", value: result.reasons.join("\n") || "NINGUNA." }
+          { name: "Usuario", value: user.tag },
+          { name: "Score", value: `${result.score}/100` },
+          { name: "Nivel", value: result.level },
+          { name: "Mensajes analizados", value: `${result.msgCount}` },
+          { name: "Razones", value: result.reasons.join("\n") || "Ninguna." }
         );
 
       return i.editReply({ embeds: [embed] });
@@ -179,19 +223,15 @@ client.on("interactionCreate", async (i) => {
 
       if (u1.username.slice(0, 4) === u2.username.slice(0, 4)) {
         similarity += 30;
+        linkUsers(u1.id, u2.id, 30, "username");
       }
 
-      db.prepare(`
-        INSERT INTO relations (user1, user2, score)
-        VALUES (?, ?, ?)
-      `).run(u1.id, u2.id, similarity);
-
       const embed = new EmbedBuilder()
-        .setTitle("COMPARACIÓN DE USUARIOS")
+        .setTitle("Comparación de usuarios")
         .addFields(
-          { name: "USUARIO 1", value: u1.tag },
-          { name: "USUARIO 2", value: u2.tag },
-          { name: "SIMILITUD", value: `${similarity}%` }
+          { name: "Usuario 1", value: u1.tag },
+          { name: "Usuario 2", value: u2.tag },
+          { name: "Similitud", value: `${similarity}%` }
         );
 
       return i.editReply({ embeds: [embed] });
@@ -199,8 +239,8 @@ client.on("interactionCreate", async (i) => {
 
   } catch (err) {
     console.error(err);
-    if (i.deferred) return i.editReply("ERROR INTERNO.");
-    return i.reply("ERROR INTERNO.");
+    if (i.deferred) return i.editReply("Error interno.");
+    return i.reply("Error interno.");
   }
 });
 
