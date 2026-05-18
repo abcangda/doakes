@@ -6,8 +6,8 @@ const db = new Database("db.db");
 
 app.use(express.static("public"));
 
-app.get("/graph", (req, res) => {
+app.get("/graph",(req,res)=>{
   res.json(db.prepare("SELECT * FROM edges").all());
 });
 
-app.listen(3000, () => console.log("dashboard online"));
+app.listen(3000,()=>console.log("dashboard online"));
