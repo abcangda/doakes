@@ -12,20 +12,14 @@ const Database = require("better-sqlite3");
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
-// ======================
-// DEBUG ANTI-CRASH
-// ======================
 process.on("unhandledRejection", console.error);
 process.on("uncaughtException", console.error);
 
-// ======================
-// DB
-// ======================
+// ================= DB =================
 const db = new Database("db.db");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT,
   content TEXT,
   timestamp INTEGER
@@ -38,9 +32,7 @@ CREATE TABLE IF NOT EXISTS edges (
 );
 `);
 
-// ======================
-// CLIENT
-// ======================
+// ================= CLIENT =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -50,9 +42,7 @@ const client = new Client({
   ]
 });
 
-// ======================
-// SAVE MESSAGES
-// ======================
+// ================= SAVE MESSAGES =================
 client.on("messageCreate", msg => {
   if (msg.author.bot) return;
 
@@ -62,9 +52,7 @@ client.on("messageCreate", msg => {
   `).run(msg.author.id, msg.content || "", Date.now());
 });
 
-// ======================
-// GET MESSAGES
-// ======================
+// ================= GET MESSAGES =================
 function getMessages(id) {
   return db.prepare(`
     SELECT content FROM messages
@@ -74,14 +62,12 @@ function getMessages(id) {
   `).all(id).map(m => m.content || "");
 }
 
-// ======================
-// SIGNATURE
-// ======================
-function signature(msgs) {
+// ================= IA VECTOR =================
+function vector(msgs) {
   const text = msgs.join(" ").toLowerCase();
 
   const words = text
-    .replace(/[^a-z0-9áéíóúñ ]/gi, "")
+    .replace(/[^a-z0-9áéíóúñ ]/gi, " ")
     .split(/\s+/)
     .filter(w => w.length > 3);
 
@@ -91,177 +77,165 @@ function signature(msgs) {
     freq[w] = (freq[w] || 0) + 1;
   }
 
-  return Object.entries(freq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(x => x[0]);
+  return {
+    avgLen: msgs.reduce((a, m) => a + m.length, 0) / (msgs.length || 1),
+    unique: Object.keys(freq).length,
+    top: Object.entries(freq)
+      .sort((a,b)=>b[1]-a[1])
+      .slice(0,10)
+      .map(x=>x[0]),
+    caps: (text.match(/[A-Z]/g)||[]).length / (text.length || 1)
+  };
 }
 
-// ======================
-// SIMILARITY SAFE
-// ======================
-function sim(a, b) {
-  const A = new Set(a || []);
-  const B = new Set(b || []);
+// ================= SIMILITUD =================
+function similarity(a,b){
+  const A = new Set(a.top);
+  const B = new Set(b.top);
 
-  const inter = [...A].filter(x => B.has(x));
-  const union = new Set([...A, ...B]);
+  const inter = [...A].filter(x=>B.has(x));
 
-  return union.size ? inter.length / union.size : 0;
+  let s = inter.length / 10;
+
+  if (Math.abs(a.avgLen - b.avgLen) < 10) s += 0.2;
+  if (Math.abs(a.unique - b.unique) < 20) s += 0.2;
+  if (Math.abs(a.caps - b.caps) < 0.05) s += 0.1;
+
+  return Math.min(s,1);
 }
 
-// ======================
-// SCORE ENGINE
-// ======================
-function score(user, other, msgsA, msgsB) {
+// ================= EDGE =================
+function link(a,b,w){
+  db.prepare(`
+    INSERT INTO edges (a,b,weight)
+    VALUES (?,?,?)
+  `).run(a,b,w);
+}
+
+// ================= SCORE =================
+function score(user, other, A, B){
+
   let s = 0;
-  const reasons = [];
+  const r = [];
 
-  const age = (Date.now() - user.createdTimestamp) / 86400000;
+  const age = (Date.now()-user.createdTimestamp)/86400000;
 
-  if (age < 7) {
-    s += 40;
-    reasons.push("cuenta muy nueva");
-  } else if (age < 30) {
-    s += 20;
-    reasons.push("cuenta reciente");
-  }
+  if(age < 7){s+=35;r.push("cuenta muy nueva");}
+  else if(age < 30){s+=15;r.push("cuenta reciente");}
 
-  const sigA = signature(msgsA);
-  const sigB = signature(msgsB);
+  const v1 = vector(A);
+  const v2 = vector(B);
 
-  const similarity = sim(sigA, sigB);
+  const sim = similarity(v1,v2);
 
-  s += similarity * 60;
+  s += sim * 70;
 
-  if (similarity > 0.3) {
-    reasons.push("patrón de escritura similar");
-  }
+  if(sim > 0.4) r.push("estilo similar");
+  if(sim > 0.6) r.push("posible misma persona");
 
   const nameMatch =
-    user.username?.substring(0, 4).toLowerCase() ===
-    other.username?.substring(0, 4).toLowerCase();
+    user.username?.slice(0,4).toLowerCase() ===
+    other.username?.slice(0,4).toLowerCase();
 
-  if (nameMatch) {
-    s += 20;
-    reasons.push("username similar");
+  if(nameMatch){
+    s += 15;
+    r.push("username similar");
   }
 
-  s = Math.min(100, Math.round(s));
+  s = Math.min(100,Math.round(s));
 
   let level = "bajo";
-  if (s >= 70) level = "alto";
-  else if (s >= 40) level = "medio";
+  if(s >= 70) level = "alto";
+  else if(s >= 40) level = "medio";
 
-  return { s, level, reasons };
+  return {s,level,r};
 }
 
-// ======================
-// SAFE EMBED BUILDER (ANTI ERROR)
-// ======================
-function buildEmbed(user, result, a, b) {
-  const reasonsText =
-    Array.isArray(result.reasons) && result.reasons.length
-      ? result.reasons.join("\n")
-      : "sin señales";
+// ================= EMBED SAFE =================
+function embed(user,res,a,b){
 
   return new EmbedBuilder()
-    .setTitle("analisis de alt")
-    .setColor(
-      result.level === "alto"
-        ? 0xe74c3c
-        : result.level === "medio"
-        ? 0xf1c40f
-        : 0x2ecc71
-    )
+    .setTitle("analisis de alt (ia)")
+    .setColor(res.level==="alto"?0xe74c3c:res.level==="medio"?0xf1c40f:0x2ecc71)
     .addFields(
-      { name: "usuario", value: String(user.tag || "desconocido"), inline: true },
-      { name: "riesgo", value: `${Number(result.s || 0)}%`, inline: true },
-      { name: "nivel", value: String(result.level || "bajo"), inline: true },
-      { name: "mensajes analizados", value: `${a} vs ${b}` },
-      { name: "razones", value: reasonsText }
+      {name:"usuario",value:String(user.tag),inline:true},
+      {name:"riesgo",value:`${res.s}%`,inline:true},
+      {name:"nivel",value:res.level,inline:true},
+      {name:"mensajes",value:`${a} vs ${b}`},
+      {name:"razones",value:res.r.length?res.r.join("\n"):"sin señales"}
     )
     .setTimestamp();
 }
 
-// ======================
-// COMMANDS
-// ======================
+// ================= COMMANDS =================
 const commands = [
   new SlashCommandBuilder()
     .setName("alt")
     .setDescription("analiza usuario")
-    .addUserOption(o => o.setName("usuario").setRequired(true)),
+    .addUserOption(o=>o.setName("usuario").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("compare")
     .setDescription("compara usuarios")
-    .addUserOption(o => o.setName("u1").setRequired(true))
-    .addUserOption(o => o.setName("u2").setRequired(true))
-].map(c => c.toJSON());
+    .addUserOption(o=>o.setName("u1").setRequired(true))
+    .addUserOption(o=>o.setName("u2").setRequired(true))
+].map(c=>c.toJSON());
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+const rest = new REST({version:"10"}).setToken(TOKEN);
 
-(async () => {
-  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+(async()=>{
+  await rest.put(Routes.applicationCommands(CLIENT_ID),{body:commands});
 })();
 
-// ======================
-// READY
-// ======================
-client.once("ready", () => {
-  console.log("bot online");
-});
+// ================= EVENTS =================
+client.once("ready",()=>console.log("bot online"));
 
-// ======================
-// COMMAND HANDLER
-// ======================
-client.on("interactionCreate", async i => {
-  if (!i.isChatInputCommand()) return;
+client.on("interactionCreate",async i=>{
+  if(!i.isChatInputCommand()) return;
 
-  // ALT
-  if (i.commandName === "alt") {
+  if(i.commandName==="alt"){
+
     const u = i.options.getUser("usuario");
 
-    const msgsA = getMessages(u.id);
+    const A = getMessages(u.id);
 
-    const other = i.guild.members.cache.find(m =>
-      m.user.id !== u.id &&
-      m.user.username?.substring(0, 4).toLowerCase() ===
-      u.username?.substring(0, 4).toLowerCase()
+    const other = i.guild.members.cache.find(m=>
+      m.user.id!==u.id &&
+      m.user.username?.slice(0,4).toLowerCase()===
+      u.username?.slice(0,4).toLowerCase()
     );
 
-    const msgsB = other ? getMessages(other.user.id) : [];
+    const B = other ? getMessages(other.user.id) : [];
 
-    const res = score(u, other || u, msgsA, msgsB);
+    const res = score(u,other||u,A,B);
 
-    return i.reply({
-      embeds: [buildEmbed(u, res, msgsA.length, msgsB.length)]
-    });
+    if(other) link(u.id,other.user.id,res.s);
+
+    return i.reply({embeds:[embed(u,res,A.length,B.length)]});
   }
 
-  // COMPARE
-  if (i.commandName === "compare") {
-    const u1 = i.options.getUser("u1");
-    const u2 = i.options.getUser("u2");
+  if(i.commandName==="compare"){
 
-    const m1 = getMessages(u1.id);
-    const m2 = getMessages(u2.id);
+    const u1=i.options.getUser("u1");
+    const u2=i.options.getUser("u2");
 
-    const s1 = signature(m1);
-    const s2 = signature(m2);
+    const m1=getMessages(u1.id);
+    const m2=getMessages(u2.id);
 
-    const simi = sim(s1, s2) * 100;
+    const v1=vector(m1);
+    const v2=vector(m2);
+
+    const sim=similarity(v1,v2)*100;
 
     return i.reply({
-      embeds: [
+      embeds:[
         new EmbedBuilder()
-          .setTitle("comparacion")
-          .setColor(simi > 70 ? 0xe74c3c : simi > 40 ? 0xf1c40f : 0x2ecc71)
+          .setTitle("compare ia")
+          .setColor(sim>70?0xe74c3c:sim>40?0xf1c40f:0x2ecc71)
           .addFields(
-            { name: "u1", value: u1.tag, inline: true },
-            { name: "u2", value: u2.tag, inline: true },
-            { name: "similitud", value: `${simi.toFixed(1)}%` }
+            {name:"u1",value:u1.tag,inline:true},
+            {name:"u2",value:u2.tag,inline:true},
+            {name:"similitud",value:`${sim.toFixed(1)}%`}
           )
       ]
     });
