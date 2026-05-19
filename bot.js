@@ -26,6 +26,7 @@ const GUILD_ID = process.env.GUILD_ID;
 const db = new Database("db.db");
 
 db.exec(`
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT,
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS edges (
   type TEXT,
   createdAt INTEGER
 );
+
 `);
 
 // ==================================================
@@ -62,7 +64,7 @@ const client = new Client({
 });
 
 // ==================================================
-// DASHBOARD
+// EXPRESS DASHBOARD
 // ==================================================
 
 const app = express();
@@ -74,7 +76,8 @@ app.get("/", (req, res) => {
 app.get("/graph", (req, res) => {
 
   const edges = db.prepare(`
-    SELECT * FROM edges
+    SELECT *
+    FROM edges
     ORDER BY weight DESC
   `).all();
 
@@ -92,34 +95,59 @@ app.listen(3000, () => {
 const commands = [
 
   new SlashCommandBuilder()
+
     .setName("alt")
     .setDescription("Analiza un usuario")
+
     .setDefaultMemberPermissions(
       PermissionFlagsBits.Administrator
     )
+
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuario a analizar")
+        .setDescription("Usuario")
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
+
     .setName("compare")
     .setDescription("Compara dos usuarios")
+
     .setDefaultMemberPermissions(
       PermissionFlagsBits.Administrator
     )
+
     .addUserOption(option =>
       option
         .setName("u1")
-        .setDescription("Primer usuario")
+        .setDescription("Usuario 1")
         .setRequired(true)
     )
+
     .addUserOption(option =>
       option
         .setName("u2")
-        .setDescription("Segundo usuario")
+        .setDescription("Usuario 2")
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+
+    .setName("profile")
+    .setDescription(
+      "Muestra el perfil avanzado de un usuario"
+    )
+
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.Administrator
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("usuario")
+        .setDescription("Usuario")
         .setRequired(true)
     )
 
@@ -135,84 +163,106 @@ async function registerCommands() {
     version: "10"
   }).setToken(TOKEN);
 
-  // LIMPIA COMANDOS GLOBALES VIEJOS
+  // ELIMINA COMANDOS GLOBALES VIEJOS
+
   await rest.put(
     Routes.applicationCommands(CLIENT_ID),
-    { body: [] }
+    {
+      body: []
+    }
   );
 
   // REGISTRA SOLO LOS NUEVOS
+
   await rest.put(
     Routes.applicationGuildCommands(
       CLIENT_ID,
       GUILD_ID
     ),
-    { body: commands }
+    {
+      body: commands
+    }
   );
 
-  console.log("Slash commands sincronizados.");
+  console.log(
+    "Slash commands sincronizados."
+  );
 }
 
 // ==================================================
 // READY
 // ==================================================
 
-client.once("clientReady", async () => {
+client.once(
+  "clientReady",
+  async () => {
 
-  console.log(
-    `Bot online como ${client.user.tag}`
-  );
+    console.log(
+      `Bot online como ${client.user.tag}`
+    );
 
-  await registerCommands();
-});
+    await registerCommands();
+  }
+);
 
 // ==================================================
 // MESSAGE LOGGER
 // ==================================================
 
-client.on("messageCreate", message => {
+client.on(
+  "messageCreate",
+  message => {
 
-  if (message.author.bot) return;
+    if (message.author.bot)
+      return;
 
-  db.prepare(`
-    INSERT INTO messages (
-      userId,
-      content,
-      createdAt
-    )
-    VALUES (?, ?, ?)
-  `).run(
-    message.author.id,
-    message.content,
-    Date.now()
-  );
-});
+    db.prepare(`
+      INSERT INTO messages (
+        userId,
+        content,
+        createdAt
+      )
+      VALUES (?, ?, ?)
+    `).run(
+      message.author.id,
+      message.content,
+      Date.now()
+    );
+  }
+);
 
 // ==================================================
 // ANALYSIS ENGINE
 // ==================================================
 
-function analyzeUser(user, messages) {
+function analyzeUser(
+  user,
+  messages
+) {
 
   let score = 0;
+
   let reasons = [];
 
-  const messageCount = messages.length;
+  const totalMessages =
+    messages.length;
 
   // ==================================================
   // ACCOUNT AGE
   // ==================================================
 
   const ageDays =
-    (Date.now() - user.createdTimestamp)
-    / 86400000;
+    (
+      Date.now()
+      - user.createdTimestamp
+    ) / 86400000;
 
   if (ageDays < 7) {
 
     score += 40;
 
     reasons.push(
-      "La cuenta fue creada hace muy poco."
+      "La cuenta fue creada recientemente."
     );
   }
 
@@ -229,26 +279,26 @@ function analyzeUser(user, messages) {
   // MESSAGE ACTIVITY
   // ==================================================
 
-  if (messageCount > 150) {
+  if (totalMessages > 150) {
 
     score += 15;
 
     reasons.push(
-      "Actividad de mensajes elevada."
+      "Actividad elevada de mensajes."
     );
   }
 
   // ==================================================
-  // WRITING STYLE
+  // AVERAGE LENGTH
   // ==================================================
 
   const avgLength =
-    messageCount > 0
+    totalMessages > 0
       ? messages.reduce(
           (a, m) =>
             a + m.content.length,
           0
-        ) / messageCount
+        ) / totalMessages
       : 0;
 
   if (avgLength < 10) {
@@ -264,21 +314,22 @@ function analyzeUser(user, messages) {
   // WORD ANALYSIS
   // ==================================================
 
-  const words = messages
-    .flatMap(m =>
+  const words =
+    messages.flatMap(m =>
       m.content
         .toLowerCase()
         .split(/\s+/)
+        .filter(Boolean)
     );
 
   const uniqueWords =
     new Set(words).size;
 
-  const ratio =
+  const lexical =
     uniqueWords /
     (words.length || 1);
 
-  if (ratio < 0.40) {
+  if (lexical < 0.40) {
 
     score += 15;
 
@@ -288,20 +339,22 @@ function analyzeUser(user, messages) {
   }
 
   // ==================================================
-  // USERNAME ANALYSIS
+  // USERNAME
   // ==================================================
 
-  if (user.username.length < 4) {
+  if (
+    user.username.length < 4
+  ) {
 
     score += 15;
 
     reasons.push(
-      "El username parece sospechoso."
+      "Username sospechoso."
     );
   }
 
   // ==================================================
-  // SCORE LIMIT
+  // LIMIT
   // ==================================================
 
   if (score > 100)
@@ -323,12 +376,14 @@ function analyzeUser(user, messages) {
     score,
     level,
     reasons,
-    messageCount
+    totalMessages,
+    avgLength,
+    lexical
   };
 }
 
 // ==================================================
-// GRAPH SYSTEM
+// CONNECTION SYSTEM
 // ==================================================
 
 function addConnection(
@@ -375,7 +430,8 @@ client.on(
       // ==================================================
 
       if (
-        interaction.commandName === "alt"
+        interaction.commandName ===
+        "alt"
       ) {
 
         const user =
@@ -413,44 +469,80 @@ client.on(
           Date.now()
         );
 
+        let color = 0x57F287;
+
+        if (
+          analysis.score >= 70
+        ) {
+
+          color = 0xED4245;
+        }
+
+        else if (
+          analysis.score >= 40
+        ) {
+
+          color = 0xFEE75C;
+        }
+
         const embed =
           new EmbedBuilder()
+
             .setTitle(
               "Análisis de usuario"
             )
+
             .setDescription(
               "Reporte avanzado del sistema."
             )
-            .setColor(0x2b2d31)
+
+            .setThumbnail(
+              user.displayAvatarURL()
+            )
+
+            .setColor(color)
+
             .addFields(
+
               {
                 name: "Usuario",
-                value: user.tag
+                value: user.tag,
+                inline: true
               },
+
               {
                 name: "Score",
                 value:
-                  `${analysis.score}/100`
+                  `${analysis.score}/100`,
+                inline: true
               },
+
               {
-                name: "Nivel de riesgo",
+                name:
+                  "Nivel de riesgo",
                 value:
-                  analysis.level
+                  analysis.level,
+                inline: true
               },
+
               {
                 name:
                   "Mensajes analizados",
                 value:
-                  `${analysis.messageCount}`
+                  `${analysis.totalMessages}`,
+                inline: true
               },
+
               {
-                name: "Razones",
+                name:
+                  "Razones",
                 value:
                   analysis.reasons.join(
                     "\n"
                   ) ||
                   "No se detectaron señales relevantes."
               }
+
             );
 
         return interaction.editReply({
@@ -483,7 +575,7 @@ client.on(
 
         let reasons = [];
 
-        // USERNAME SIMILARITY
+        // USERNAME
 
         if (
           u1.username
@@ -509,7 +601,7 @@ client.on(
           );
         }
 
-        // MESSAGE ANALYSIS
+        // MESSAGE STYLE
 
         const m1 =
           db.prepare(`
@@ -546,7 +638,9 @@ client.on(
             : 0;
 
         if (
-          Math.abs(avg1 - avg2) < 6
+          Math.abs(
+            avg1 - avg2
+          ) < 6
         ) {
 
           similarity += 20;
@@ -578,40 +672,76 @@ client.on(
         else if (similarity >= 40)
           level = "Medio";
 
+        let color = 0x57F287;
+
+        if (
+          similarity >= 70
+        ) {
+
+          color = 0xED4245;
+        }
+
+        else if (
+          similarity >= 40
+        ) {
+
+          color = 0xFEE75C;
+        }
+
         const embed =
           new EmbedBuilder()
+
             .setTitle(
               "Comparación de usuarios"
             )
+
             .setDescription(
               "Análisis avanzado de similitud."
             )
-            .setColor(0x2b2d31)
+
+            .setColor(color)
+
             .addFields(
+
               {
-                name: "Usuario 1",
-                value: u1.tag
+                name:
+                  "Usuario 1",
+                value: u1.tag,
+                inline: true
               },
+
               {
-                name: "Usuario 2",
-                value: u2.tag
+                name:
+                  "Usuario 2",
+                value: u2.tag,
+                inline: true
               },
+
               {
-                name: "Similitud",
+                name:
+                  "Similitud",
                 value:
-                  `${similarity}%`
+                  `${similarity}%`,
+                inline: true
               },
+
               {
-                name: "Nivel",
-                value: level
+                name:
+                  "Nivel",
+                value: level,
+                inline: true
               },
+
               {
-                name: "Razones",
+                name:
+                  "Razones",
                 value:
-                  reasons.join("\n")
-                  ||
+                  reasons.join(
+                    "\n"
+                  ) ||
                   "No se detectaron coincidencias relevantes."
               }
+
             );
 
         return interaction.editReply({
@@ -619,30 +749,294 @@ client.on(
         });
       }
 
-    }
+      // ==================================================
+      // /PROFILE
+      // ==================================================
 
-    catch (err) {
+      if (
+        interaction.commandName ===
+        "profile"
+      ) {
 
-      console.error(err);
+        const user =
+          interaction.options.getUser(
+            "usuario"
+          );
 
-      if (interaction.deferred) {
+        await interaction.deferReply();
 
-        return interaction.editReply({
-          content:
-            "Ocurrió un error interno."
-        });
-      }
+        const messages =
+          db.prepare(`
+            SELECT *
+            FROM messages
+            WHERE userId = ?
+          `).all(user.id);
 
-      return interaction.reply({
-        content:
-          "Ocurrió un error interno."
-      });
-    }
-  }
-);
+        const analysis =
+          analyzeUser(
+            user,
+            messages
+          );
 
-// ==================================================
-// LOGIN
-// ==================================================
+        // ==================================================
+        // WORDS
+        // ==================================================
 
-client.login(TOKEN);
+        const words =
+          messages.flatMap(m =>
+            m.content
+              .toLowerCase()
+              .split(/\s+/)
+              .filter(Boolean)
+          );
+
+        // ==================================================
+        // MOST USED WORD
+        // ==================================================
+
+        const freq = {};
+
+        for (const word of words) {
+
+          if (word.length < 3)
+            continue;
+
+          freq[word] =
+            (freq[word] || 0) + 1;
+        }
+
+        let topWord =
+          "No disponible";
+
+        let topCount = 0;
+
+        for (const word in freq) {
+
+          if (
+            freq[word] >
+            topCount
+          ) {
+
+            topCount =
+              freq[word];
+
+            topWord = word;
+          }
+        }
+
+        // ==================================================
+        // ACTIVE DAY
+        // ==================================================
+
+        const dayMap = {
+          0: "Domingo",
+          1: "Lunes",
+          2: "Martes",
+          3: "Miércoles",
+          4: "Jueves",
+          5: "Viernes",
+          6: "Sábado"
+        };
+
+        const days = {};
+
+        for (const msg of messages) {
+
+          const day =
+            new Date(
+              msg.createdAt
+            ).getDay();
+
+          days[day] =
+            (days[day] || 0) + 1;
+        }
+
+        let activeDay =
+          "No disponible";
+
+        let activeDayCount = 0;
+
+        for (const d in days) {
+
+          if (
+            days[d] >
+            activeDayCount
+          ) {
+
+            activeDayCount =
+              days[d];
+
+            activeDay =
+              dayMap[d];
+          }
+        }
+
+        // ==================================================
+        // ACTIVE HOUR
+        // ==================================================
+
+        const hours = {};
+
+        for (const msg of messages) {
+
+          const hour =
+            new Date(
+              msg.createdAt
+            ).getHours();
+
+          hours[hour] =
+            (hours[hour] || 0) + 1;
+        }
+
+        let activeHour =
+          "No disponible";
+
+        let activeHourCount = 0;
+
+        for (const h in hours) {
+
+          if (
+            hours[h] >
+            activeHourCount
+          ) {
+
+            activeHourCount =
+              hours[h];
+
+            activeHour =
+              `${h}:00`;
+          }
+        }
+
+        // ==================================================
+        // CONNECTIONS
+        // ==================================================
+
+        const connections =
+          db.prepare(`
+            SELECT *
+            FROM edges
+            WHERE user1 = ?
+            OR user2 = ?
+          `).all(
+            user.id,
+            user.id
+          );
+
+        // ==================================================
+        // COLORS
+        // ==================================================
+
+        let color = 0x57F287;
+
+        if (
+          analysis.score >= 70
+        ) {
+
+          color = 0xED4245;
+        }
+
+        else if (
+          analysis.score >= 40
+        ) {
+
+          color = 0xFEE75C;
+        }
+
+        // ==================================================
+        // EMBED
+        // ==================================================
+
+        const embed =
+          new EmbedBuilder()
+
+            .setTitle(
+              "Perfil interno de usuario"
+            )
+
+            .setDescription(
+              "Reporte avanzado del sistema."
+            )
+
+            .setThumbnail(
+              user.displayAvatarURL()
+            )
+
+            .setColor(color)
+
+            .addFields(
+
+              {
+                name: "Usuario",
+                value: user.tag,
+                inline: true
+              },
+
+              {
+                name: "ID",
+                value: user.id,
+                inline: true
+              },
+
+              {
+                name:
+                  "Cuenta creada",
+                value:
+                  `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`
+              },
+
+              {
+                name:
+                  "Mensajes analizados",
+                value:
+                  `${analysis.totalMessages}`,
+                inline: true
+              },
+
+              {
+                name:
+                  "Promedio de longitud",
+                value:
+                  `${analysis.avgLength.toFixed(1)} caracteres`,
+                inline: true
+              },
+
+              {
+                name:
+                  "Variedad léxica",
+                value:
+                  `${analysis.lexical.toFixed(2)}`,
+                inline: true
+              },
+
+              {
+                name:
+                  "Palabra más usada",
+                value:
+                  `${topWord} (${topCount})`,
+                inline: true
+              },
+
+              {
+                name:
+                  "Día más activo",
+                value:
+                  activeDay,
+                inline: true
+              },
+
+              {
+                name:
+                  "Hora más activa",
+                value:
+                  activeHour,
+                inline: true
+              },
+
+              {
+                name:
+                  "Conexiones detectadas",
+                value:
+                  `${connections.length}`,
+                inline: true
+      
