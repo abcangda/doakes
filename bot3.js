@@ -10,6 +10,9 @@ const Database =
 const db =
   new Database("db.db");
 
+const OWNER_ID =
+  "1305030009681088592";
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS permissions (
   userId TEXT PRIMARY KEY
@@ -63,6 +66,24 @@ const command =
       sub
         .setName("removerole")
         .setDescription("Quita un rol")
+        .addUserOption(option =>
+          option
+            .setName("usuario")
+            .setDescription("Usuario")
+            .setRequired(true)
+        )
+        .addRoleOption(option =>
+          option
+            .setName("rol")
+            .setDescription("Rol")
+            .setRequired(true)
+        )
+    )
+
+    .addSubcommand(sub =>
+      sub
+        .setName("addrol")
+        .setDescription("Da un rol")
         .addUserOption(option =>
           option
             .setName("usuario")
@@ -197,6 +218,21 @@ async function execute(
 
   if (sub === "removerole") {
 
+    if (
+      interaction.user.id !==
+      OWNER_ID
+    ) {
+
+      return interaction.reply({
+
+        content:
+          "No puedes usar este comando.",
+
+        ephemeral: true
+
+      });
+    }
+
     const member =
       interaction.options.getMember(
         "usuario"
@@ -264,6 +300,97 @@ async function execute(
 
           .setColor(
             0xED4245
+          )
+
+      ]
+
+    });
+  }
+
+  if (sub === "addrol") {
+
+    if (
+      interaction.user.id !==
+      OWNER_ID
+    ) {
+
+      return interaction.reply({
+
+        content:
+          "No puedes usar este comando.",
+
+        ephemeral: true
+
+      });
+    }
+
+    const member =
+      interaction.options.getMember(
+        "usuario"
+      );
+
+    const role =
+      interaction.options.getRole(
+        "rol"
+      );
+
+    if (!member) {
+
+      return interaction.reply({
+
+        content:
+          "Usuario no encontrado.",
+
+        ephemeral: true
+
+      });
+    }
+
+    if (
+      member.roles.cache.has(
+        role.id
+      )
+    ) {
+
+      return interaction.reply({
+
+        content:
+          "Ese usuario ya tiene ese rol.",
+
+        ephemeral: true
+
+      });
+    }
+
+    await member.roles.add(
+      role.id
+    );
+
+    await interaction.reply({
+
+      content:
+        "Rol agregado.",
+
+      ephemeral: true
+
+    });
+
+    await interaction.channel.send({
+
+      embeds: [
+
+        new EmbedBuilder()
+
+          .setTitle(
+            "Rol agregado"
+          )
+
+          .setDescription(
+            `Se agregó ${role} a ${member.user.tag}.`
+          )
+
+          .setColor(
+            0x57F287
           )
 
       ]
