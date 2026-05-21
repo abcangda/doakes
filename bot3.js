@@ -10,8 +10,13 @@ const Database =
 const db =
   new Database("db.db");
 
-const OWNER_ID =
-  "1305030009681088592";
+const OWNER_IDS = [
+
+  "1305030009681088592",
+
+  "1400202137903960146"
+
+];
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS permissions (
@@ -219,8 +224,9 @@ async function execute(
   if (sub === "removerole") {
 
     if (
-      interaction.user.id !==
-      OWNER_ID
+      !OWNER_IDS.includes(
+        interaction.user.id
+      )
     ) {
 
       return interaction.reply({
@@ -310,8 +316,9 @@ async function execute(
   if (sub === "addrol") {
 
     if (
-      interaction.user.id !==
-      OWNER_ID
+      !OWNER_IDS.includes(
+        interaction.user.id
+      )
     ) {
 
       return interaction.reply({
