@@ -8,15 +8,17 @@ const {
   PermissionFlagsBits
 } = require("discord.js");
 
-const express = require("express");
-const Database = require("better-sqlite3");
+const express =
+  require("express");
 
-const transcribe = require("./bot2");
-const permission = require("./bot3");
+const Database =
+  require("better-sqlite3");
 
-// =========================
-// ENV
-// =========================
+const transcribe =
+  require("./bot2");
+
+const permission =
+  require("./bot3");
 
 const TOKEN =
   process.env.TOKEN;
@@ -27,15 +29,10 @@ const CLIENT_ID =
 const GUILD_ID =
   process.env.GUILD_ID;
 
-// =========================
-// DATABASE
-// =========================
-
 const db =
   new Database("db.db");
 
 db.exec(`
-
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   userId TEXT,
@@ -46,126 +43,19 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS permissions (
   userId TEXT PRIMARY KEY
 );
-
-CREATE TABLE IF NOT EXISTS edges (
-  user1 TEXT,
-  user2 TEXT,
-  weight INTEGER,
-  type TEXT,
-  createdAt INTEGER
-);
-
 `);
-
-// =========================
-// FUNCTIONS
-// =========================
 
 function hasPermission(userId) {
 
-  const row = db.prepare(`
-    SELECT userId
-    FROM permissions
-    WHERE userId = ?
-  `).get(userId);
+  const row =
+    db.prepare(`
+      SELECT *
+      FROM permissions
+      WHERE userId = ?
+    `).get(userId);
 
-  return row ? true : false;
+  return !!row;
 }
-
-function analyzeUser(
-  user,
-  messages
-) {
-
-  let score = 0;
-
-  let reasons = [];
-
-  const totalMessages =
-    messages.length;
-
-  const ageDays =
-    (
-      Date.now()
-      - user.createdTimestamp
-    ) / 86400000;
-
-  // =====================
-  // ACCOUNT AGE
-  // =====================
-
-  if (ageDays < 7) {
-
-    score += 40;
-
-    reasons.push(
-      "Cuenta creada recientemente."
-    );
-  }
-
-  else if (ageDays < 30) {
-
-    score += 20;
-
-    reasons.push(
-      "Cuenta relativamente nueva."
-    );
-  }
-
-  // =====================
-  // MESSAGE COUNT
-  // =====================
-
-  if (totalMessages > 100) {
-
-    score += 20;
-
-    reasons.push(
-      "Actividad elevada."
-    );
-  }
-
-  // =====================
-  // USERNAME
-  // =====================
-
-  if (
-    user.username.length < 4
-  ) {
-
-    score += 15;
-
-    reasons.push(
-      "Username sospechoso."
-    );
-  }
-
-  // =====================
-  // LIMITS
-  // =====================
-
-  if (score > 100)
-    score = 100;
-
-  let level = "Bajo";
-
-  if (score >= 70)
-    level = "Alto";
-
-  else if (score >= 40)
-    level = "Medio";
-
-  return {
-    score,
-    level,
-    reasons,
-    totalMessages
-  };
-}
-
-// =========================
-// CLIENT
-// =========================
 
 const client =
   new Client({
@@ -181,40 +71,14 @@ const client =
     ]
   });
 
-// =========================
-// EXPRESS
-// =========================
-
-const app = express();
+const app =
+  express();
 
 app.get("/", (req, res) => {
-
-  res.send(
-    "Alt Intelligence System Online."
-  );
+  res.send("Bot online.");
 });
 
-app.get("/graph", (req, res) => {
-
-  const rows = db.prepare(`
-    SELECT *
-    FROM edges
-    ORDER BY weight DESC
-  `).all();
-
-  res.json(rows);
-});
-
-app.listen(3000, () => {
-
-  console.log(
-    "Dashboard online."
-  );
-});
-
-// =========================
-// COMMANDS
-// =========================
+app.listen(3000);
 
 const commands = [
 
@@ -231,15 +95,9 @@ const commands = [
     )
 
     .addUserOption(option =>
-
       option
-
         .setName("usuario")
-
-        .setDescription(
-          "Usuario"
-        )
-
+        .setDescription("Usuario")
         .setRequired(true)
     ),
 
@@ -252,28 +110,16 @@ const commands = [
     )
 
     .addUserOption(option =>
-
       option
-
         .setName("u1")
-
-        .setDescription(
-          "Usuario 1"
-        )
-
+        .setDescription("Usuario 1")
         .setRequired(true)
     )
 
     .addUserOption(option =>
-
       option
-
         .setName("u2")
-
-        .setDescription(
-          "Usuario 2"
-        )
-
+        .setDescription("Usuario 2")
         .setRequired(true)
     ),
 
@@ -282,27 +128,17 @@ const commands = [
     .setName("profile")
 
     .setDescription(
-      "Muestra el perfil avanzado"
+      "Perfil avanzado"
     )
 
     .addUserOption(option =>
-
       option
-
         .setName("usuario")
-
-        .setDescription(
-          "Usuario"
-        )
-
+        .setDescription("Usuario")
         .setRequired(true)
     )
 
 ].map(cmd => cmd.toJSON());
-
-// =========================
-// REGISTER COMMANDS
-// =========================
 
 async function registerCommands() {
 
@@ -311,16 +147,12 @@ async function registerCommands() {
       version: "10"
     }).setToken(TOKEN);
 
-  // LIMPIAR GLOBALES
-
   await rest.put(
     Routes.applicationCommands(
       CLIENT_ID
     ),
     { body: [] }
   );
-
-  // REGISTRAR GUILD
 
   await rest.put(
     Routes.applicationGuildCommands(
@@ -329,15 +161,7 @@ async function registerCommands() {
     ),
     { body: commands }
   );
-
-  console.log(
-    "Commands synced."
-  );
 }
-
-// =========================
-// READY
-// =========================
 
 client.once(
   "clientReady",
@@ -350,10 +174,6 @@ client.once(
     await registerCommands();
   }
 );
-
-// =========================
-// MESSAGE LOGGER
-// =========================
 
 client.on(
   "messageCreate",
@@ -377,10 +197,6 @@ client.on(
   }
 );
 
-// =========================
-// INTERACTIONS
-// =========================
-
 client.on(
   "interactionCreate",
   async interaction => {
@@ -390,10 +206,6 @@ client.on(
     ) return;
 
     try {
-
-      // =====================
-      // PERMISSIONS
-      // =====================
 
       const isAdmin =
         interaction.memberPermissions?.has(
@@ -405,22 +217,16 @@ client.on(
           interaction.user.id
         );
 
-      // =====================
-      // PERMISSION COMMAND
-      // =====================
-
       if (
         interaction.commandName ===
         "permission"
       ) {
 
-        if (
-          isAdmin !== true
-        ) {
+        if (!isAdmin) {
 
           return interaction.reply({
             content:
-              "Solo administradores pueden usar este comando.",
+              "Solo administradores.",
             ephemeral: true
           });
         }
@@ -430,31 +236,17 @@ client.on(
         );
       }
 
-      // =====================
-      // BLOCK USERS
-      // =====================
-
       if (
-
-        isAdmin !== true &&
-
-        permitted !== true
-
+        !isAdmin &&
+        !permitted
       ) {
 
         return interaction.reply({
-
           content:
-            "No tienes permisos para usar el bot.",
-
+            "No tienes permisos.",
           ephemeral: true
-
         });
       }
-
-      // =====================
-      // TRANSCRIBE
-      // =====================
 
       if (
         interaction.commandName ===
@@ -466,10 +258,6 @@ client.on(
         );
       }
 
-      // =====================
-      // ALT
-      // =====================
-
       if (
         interaction.commandName ===
         "alt"
@@ -480,8 +268,6 @@ client.on(
             "usuario"
           );
 
-        await interaction.deferReply();
-
         const messages =
           db.prepare(`
             SELECT *
@@ -489,91 +275,85 @@ client.on(
             WHERE userId = ?
           `).all(user.id);
 
-        const analysis =
-          analyzeUser(
-            user,
-            messages
-          );
+        let score = 0;
 
-        let color = 0x57F287;
+        if (
+          messages.length > 50
+        ) score += 20;
 
-        if (analysis.score >= 70)
-          color = 0xED4245;
+        const age =
+          (
+            Date.now()
+            - user.createdTimestamp
+          ) / 86400000;
 
-        else if (
-          analysis.score >= 40
-        )
-          color = 0xFEE75C;
+        if (age < 7)
+          score += 50;
 
-        const embed =
-          new EmbedBuilder()
+        let level = "Bajo";
 
-            .setTitle(
-              "Análisis de usuario"
-            )
+        if (score >= 70)
+          level = "Alto";
 
-            .setDescription(
-              "Reporte avanzado del sistema."
-            )
+        else if (score >= 40)
+          level = "Medio";
 
-            .setThumbnail(
-              user.displayAvatarURL()
-            )
+        return interaction.reply({
+          embeds: [
 
-            .setColor(color)
+            new EmbedBuilder()
 
-            .addFields(
+              .setTitle(
+                "Análisis de usuario"
+              )
 
-              {
-                name:
-                  "Usuario",
-                value:
-                  user.tag,
-                inline: true
-              },
+              .setThumbnail(
+                user.displayAvatarURL()
+              )
 
-              {
-                name:
-                  "Score",
-                value:
-                  `${analysis.score}/100`,
-                inline: true
-              },
+              .setColor(
+                score >= 70
+                ? 0xED4245
+                : score >= 40
+                ? 0xFEE75C
+                : 0x57F287
+              )
 
-              {
-                name:
-                  "Nivel",
-                value:
-                  analysis.level,
-                inline: true
-              },
+              .addFields(
 
-              {
-                name:
-                  "Mensajes analizados",
-                value:
-                  `${analysis.totalMessages}`,
-                inline: true
-              },
+                {
+                  name: "Usuario",
+                  value: user.tag,
+                  inline: true
+                },
 
-              {
-                name:
-                  "Razones",
-                value:
-                  analysis.reasons.join("\n")
-                  || "Sin señales relevantes."
-              }
+                {
+                  name: "Score",
+                  value:
+                    `${score}/100`,
+                  inline: true
+                },
 
-            );
+                {
+                  name: "Nivel",
+                  value:
+                    level,
+                  inline: true
+                },
 
-        return interaction.editReply({
-          embeds: [embed]
+                {
+                  name:
+                    "Mensajes analizados",
+                  value:
+                    `${messages.length}`,
+                  inline: true
+                }
+
+              )
+
+          ]
         });
       }
-
-      // =====================
-      // COMPARE
-      // =====================
 
       if (
         interaction.commandName ===
@@ -590,132 +370,69 @@ client.on(
             "u2"
           );
 
-        await interaction.deferReply();
-
         let similarity = 0;
-
-        let reasons = [];
 
         if (
 
           u1.username
-            .slice(0, 4)
+            .slice(0, 3)
             .toLowerCase()
 
           ===
 
           u2.username
-            .slice(0, 4)
+            .slice(0, 3)
             .toLowerCase()
 
         ) {
 
-          similarity += 30;
-
-          reasons.push(
-            "Coincidencia parcial de username."
-          );
-
-          db.prepare(`
-            INSERT INTO edges (
-              user1,
-              user2,
-              weight,
-              type,
-              createdAt
-            )
-            VALUES (?, ?, ?, ?, ?)
-          `).run(
-
-            u1.id,
-
-            u2.id,
-
-            30,
-
-            "username_similarity",
-
-            Date.now()
-          );
+          similarity += 40;
         }
 
-        let level = "Bajo";
+        return interaction.reply({
+          embeds: [
 
-        if (similarity >= 70)
-          level = "Alto";
+            new EmbedBuilder()
 
-        else if (
-          similarity >= 40
-        )
-          level = "Medio";
+              .setTitle(
+                "Comparación"
+              )
 
-        const embed =
-          new EmbedBuilder()
+              .setColor(
+                0x5865F2
+              )
 
-            .setTitle(
-              "Comparación"
-            )
+              .addFields(
 
-            .setDescription(
-              "Análisis avanzado."
-            )
+                {
+                  name:
+                    "Usuario 1",
+                  value:
+                    u1.tag,
+                  inline: true
+                },
 
-            .setColor(
-              0x5865F2
-            )
+                {
+                  name:
+                    "Usuario 2",
+                  value:
+                    u2.tag,
+                  inline: true
+                },
 
-            .addFields(
+                {
+                  name:
+                    "Similitud",
+                  value:
+                    `${similarity}%`,
+                  inline: true
+                }
 
-              {
-                name:
-                  "Usuario 1",
-                value:
-                  u1.tag,
-                inline: true
-              },
+              )
 
-              {
-                name:
-                  "Usuario 2",
-                value:
-                  u2.tag,
-                inline: true
-              },
-
-              {
-                name:
-                  "Similitud",
-                value:
-                  `${similarity}%`,
-                inline: true
-              },
-
-              {
-                name:
-                  "Nivel",
-                value:
-                  level,
-                inline: true
-              },
-
-              {
-                name:
-                  "Razones",
-                value:
-                  reasons.join("\n")
-                  || "Sin coincidencias relevantes."
-              }
-
-            );
-
-        return interaction.editReply({
-          embeds: [embed]
+          ]
         });
       }
-
-      // =====================
-      // PROFILE
-      // =====================
 
       if (
         interaction.commandName ===
@@ -727,8 +444,6 @@ client.on(
             "usuario"
           );
 
-        await interaction.deferReply();
-
         const messages =
           db.prepare(`
             SELECT *
@@ -736,73 +451,52 @@ client.on(
             WHERE userId = ?
           `).all(user.id);
 
-        const analysis =
-          analyzeUser(
-            user,
-            messages
-          );
+        return interaction.reply({
+          embeds: [
 
-        const embed =
-          new EmbedBuilder()
+            new EmbedBuilder()
 
-            .setTitle(
-              "Perfil avanzado"
-            )
+              .setTitle(
+                "Perfil avanzado"
+              )
 
-            .setThumbnail(
-              user.displayAvatarURL()
-            )
+              .setThumbnail(
+                user.displayAvatarURL()
+              )
 
-            .setColor(
-              0x5865F2
-            )
+              .setColor(
+                0x5865F2
+              )
 
-            .addFields(
+              .addFields(
 
-              {
-                name:
-                  "Usuario",
-                value:
-                  user.tag,
-                inline: true
-              },
+                {
+                  name:
+                    "Usuario",
+                  value:
+                    user.tag,
+                  inline: true
+                },
 
-              {
-                name:
-                  "ID",
-                value:
-                  user.id,
-                inline: true
-              },
+                {
+                  name:
+                    "ID",
+                  value:
+                    user.id,
+                  inline: true
+                },
 
-              {
-                name:
-                  "Mensajes",
-                value:
-                  `${analysis.totalMessages}`,
-                inline: true
-              },
+                {
+                  name:
+                    "Mensajes",
+                  value:
+                    `${messages.length}`,
+                  inline: true
+                }
 
-              {
-                name:
-                  "Score",
-                value:
-                  `${analysis.score}/100`,
-                inline: true
-              },
+              )
 
-              {
-                name:
-                  "Nivel",
-                value:
-                  analysis.level,
-                inline: true
-              }
-
-            );
-
-        return interaction.editReply({
-          embeds: [embed]
+          ]
         });
       }
 
@@ -812,30 +506,13 @@ client.on(
 
       console.error(err);
 
-      if (
-        interaction.deferred
-      ) {
-
-        return interaction.editReply({
-          content:
-            "Ocurrió un error."
-        });
-      }
-
       return interaction.reply({
-
         content:
           "Ocurrió un error.",
-
         ephemeral: true
-
       });
     }
   }
 );
-
-// =========================
-// LOGIN
-// =========================
 
 client.login(TOKEN);
