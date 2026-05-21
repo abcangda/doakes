@@ -4,8 +4,13 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const OWNER_ID =
-  "1305030009681088592";
+const OWNER_IDS = [
+
+  "1305030009681088592",
+
+  "1400202137903960146"
+
+];
 
 const command =
   new SlashCommandBuilder()
@@ -39,8 +44,9 @@ async function execute(
 ) {
 
   if (
-    interaction.user.id !==
-    OWNER_ID
+    !OWNER_IDS.includes(
+      interaction.user.id
+    )
   ) {
 
     return interaction.reply({
