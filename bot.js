@@ -1,4 +1,4 @@
-const {
+  const {
   Client,
   GatewayIntentBits,
   SlashCommandBuilder,
@@ -19,6 +19,9 @@ const transcribe =
 
 const permission =
   require("./bot3");
+
+const ban =
+  require("./bot4");
 
 const TOKEN =
   process.env.TOKEN;
@@ -85,6 +88,8 @@ const commands = [
   transcribe.command,
 
   permission.command,
+
+  ban.command,
 
   new SlashCommandBuilder()
 
@@ -232,6 +237,16 @@ client.on(
         }
 
         return permission.execute(
+          interaction
+        );
+      }
+
+      if (
+        interaction.commandName ===
+        "ban"
+      ) {
+
+        return ban.execute(
           interaction
         );
       }
@@ -515,4 +530,4 @@ client.on(
   }
 );
 
-client.login(TOKEN);
+client.login(TOKEN);                
