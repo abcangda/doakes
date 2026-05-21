@@ -20,12 +20,21 @@ const GUILD_ID = process.env.GUILD_ID;
 
 const db = new Database("db.db");
 
+// =========================
+// DATABASE
+// =========================
+
 db.exec(`
+
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   userId TEXT,
   content TEXT,
   createdAt INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+  userId TEXT PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -36,20 +45,96 @@ CREATE TABLE IF NOT EXISTS edges (
   createdAt INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS permissions (
-  userId TEXT PRIMARY KEY
-);
 `);
+
+// =========================
+// FUNCTIONS
+// =========================
 
 function hasPermission(userId) {
 
   const row = db.prepare(`
-    SELECT * FROM permissions
+    SELECT userId
+    FROM permissions
     WHERE userId = ?
   `).get(userId);
 
-  return !!row;
+  return row ? true : false;
 }
+
+function analyzeUser(user, messages) {
+
+  let score = 0;
+
+  let reasons = [];
+
+  const totalMessages =
+    messages.length;
+
+  const ageDays =
+    (
+      Date.now()
+      - user.createdTimestamp
+    ) / 86400000;
+
+  if (ageDays < 7) {
+
+    score += 40;
+
+    reasons.push(
+      "Cuenta creada recientemente."
+    );
+  }
+
+  else if (ageDays < 30) {
+
+    score += 20;
+
+    reasons.push(
+      "Cuenta relativamente nueva."
+    );
+  }
+
+  if (totalMessages > 100) {
+
+    score += 20;
+
+    reasons.push(
+      "Actividad elevada."
+    );
+  }
+
+  if (user.username.length < 4) {
+
+    score += 15;
+
+    reasons.push(
+      "Username sospechoso."
+    );
+  }
+
+  if (score > 100)
+    score = 100;
+
+  let level = "Bajo";
+
+  if (score >= 70)
+    level = "Alto";
+
+  else if (score >= 40)
+    level = "Medio";
+
+  return {
+    score,
+    level,
+    reasons,
+    totalMessages
+  };
+}
+
+// =========================
+// CLIENT
+// =========================
 
 const client = new Client({
   intents: [
@@ -59,15 +144,40 @@ const client = new Client({
   ]
 });
 
+// =========================
+// EXPRESS
+// =========================
+
 const app = express();
 
 app.get("/", (req, res) => {
-  res.send("Alt Intelligence System Online.");
+
+  res.send(
+    "Alt Intelligence System Online."
+  );
+});
+
+app.get("/graph", (req, res) => {
+
+  const edges = db.prepare(`
+    SELECT *
+    FROM edges
+    ORDER BY weight DESC
+  `).all();
+
+  res.json(edges);
 });
 
 app.listen(3000, () => {
-  console.log("Dashboard online.");
+
+  console.log(
+    "Dashboard online."
+  );
 });
+
+// =========================
+// COMMANDS
+// =========================
 
 const commands = [
 
@@ -126,7 +236,11 @@ const commands = [
         .setRequired(true)
     )
 
-].map(c => c.toJSON());
+].map(cmd => cmd.toJSON());
+
+// =========================
+// REGISTER COMMANDS
+// =========================
 
 async function registerCommands() {
 
@@ -134,12 +248,16 @@ async function registerCommands() {
     version: "10"
   }).setToken(TOKEN);
 
+  // LIMPIAR GLOBALES
+
   await rest.put(
     Routes.applicationCommands(
       CLIENT_ID
     ),
     { body: [] }
   );
+
+  // REGISTRAR GUILD
 
   await rest.put(
     Routes.applicationGuildCommands(
@@ -149,8 +267,14 @@ async function registerCommands() {
     { body: commands }
   );
 
-  console.log("Commands synced.");
+  console.log(
+    "Commands synced."
+  );
 }
+
+// =========================
+// READY
+// =========================
 
 client.once(
   "clientReady",
@@ -163,6 +287,10 @@ client.once(
     await registerCommands();
   }
 );
+
+// =========================
+// MESSAGE LOGGING
+// =========================
 
 client.on(
   "messageCreate",
@@ -186,69 +314,9 @@ client.on(
   }
 );
 
-function analyzeUser(
-  user,
-  messages
-) {
-
-  let score = 0;
-
-  let reasons = [];
-
-  const totalMessages =
-    messages.length;
-
-  const ageDays =
-    (
-      Date.now()
-      - user.createdTimestamp
-    ) / 86400000;
-
-  if (ageDays < 7) {
-
-    score += 40;
-
-    reasons.push(
-      "Cuenta creada recientemente."
-    );
-  }
-
-  if (totalMessages > 100) {
-
-    score += 20;
-
-    reasons.push(
-      "Actividad elevada."
-    );
-  }
-
-  if (user.username.length < 4) {
-
-    score += 15;
-
-    reasons.push(
-      "Username sospechoso."
-    );
-  }
-
-  if (score > 100)
-    score = 100;
-
-  let level = "Bajo";
-
-  if (score >= 70)
-    level = "Alto";
-
-  else if (score >= 40)
-    level = "Medio";
-
-  return {
-    score,
-    level,
-    reasons,
-    totalMessages
-  };
-}
+// =========================
+// INTERACTIONS
+// =========================
 
 client.on(
   "interactionCreate",
@@ -260,41 +328,61 @@ client.on(
 
     try {
 
-      const allowed = [
-        "permission"
-      ];
+      const member =
+        interaction.member;
+
+      const isAdmin =
+        member.permissions.has(
+          PermissionFlagsBits.Administrator
+        );
+
+      const permitted =
+        hasPermission(
+          interaction.user.id
+        );
+
+      // =====================
+      // ADMIN ONLY
+      // =====================
 
       if (
-        !allowed.includes(
-          interaction.commandName
-        )
+        interaction.commandName ===
+        "permission"
       ) {
 
-        const member =
-          interaction.member;
-
-        const isAdmin =
-          member.permissions.has(
-            PermissionFlagsBits.Administrator
-          );
-
-        const permitted =
-          hasPermission(
-            interaction.user.id
-          );
-
-        if (
-          !isAdmin &&
-          !permitted
-        ) {
+        if (!isAdmin) {
 
           return interaction.reply({
             content:
-              "No tienes permisos para usar este comando.",
+              "Solo administradores pueden usar este comando.",
             ephemeral: true
           });
         }
+
+        return permission.execute(
+          interaction
+        );
       }
+
+      // =====================
+      // OTHER COMMANDS
+      // =====================
+
+      if (
+        !isAdmin &&
+        !permitted
+      ) {
+
+        return interaction.reply({
+          content:
+            "No tienes permisos para usar el bot.",
+          ephemeral: true
+        });
+      }
+
+      // =====================
+      // TRANSCRIBE
+      // =====================
 
       if (
         interaction.commandName ===
@@ -306,15 +394,9 @@ client.on(
         );
       }
 
-      if (
-        interaction.commandName ===
-        "permission"
-      ) {
-
-        return permission.execute(
-          interaction
-        );
-      }
+      // =====================
+      // ALT
+      // =====================
 
       if (
         interaction.commandName ===
@@ -330,7 +412,8 @@ client.on(
 
         const messages =
           db.prepare(`
-            SELECT * FROM messages
+            SELECT *
+            FROM messages
             WHERE userId = ?
           `).all(user.id);
 
@@ -358,7 +441,7 @@ client.on(
             )
 
             .setDescription(
-              "Reporte avanzado."
+              "Reporte avanzado del sistema."
             )
 
             .setThumbnail(
@@ -412,6 +495,10 @@ client.on(
         });
       }
 
+      // =====================
+      // COMPARE
+      // =====================
+
       if (
         interaction.commandName ===
         "compare"
@@ -431,6 +518,8 @@ client.on(
 
         let similarity = 0;
 
+        let reasons = [];
+
         if (
           u1.username
             .slice(0, 4)
@@ -442,6 +531,27 @@ client.on(
         ) {
 
           similarity += 30;
+
+          reasons.push(
+            "Coincidencia parcial de username."
+          );
+
+          db.prepare(`
+            INSERT INTO edges (
+              user1,
+              user2,
+              weight,
+              type,
+              createdAt
+            )
+            VALUES (?, ?, ?, ?, ?)
+          `).run(
+            u1.id,
+            u2.id,
+            30,
+            "username_similarity",
+            Date.now()
+          );
         }
 
         let level = "Bajo";
@@ -459,6 +569,10 @@ client.on(
 
             .setTitle(
               "Comparación"
+            )
+
+            .setDescription(
+              "Análisis avanzado."
             )
 
             .setColor(
@@ -497,6 +611,14 @@ client.on(
                 value:
                   level,
                 inline: true
+              },
+
+              {
+                name:
+                  "Razones",
+                value:
+                  reasons.join("\n")
+                  || "Sin coincidencias relevantes."
               }
 
             );
@@ -505,6 +627,10 @@ client.on(
           embeds: [embed]
         });
       }
+
+      // =====================
+      // PROFILE
+      // =====================
 
       if (
         interaction.commandName ===
@@ -520,7 +646,8 @@ client.on(
 
         const messages =
           db.prepare(`
-            SELECT * FROM messages
+            SELECT *
+            FROM messages
             WHERE userId = ?
           `).all(user.id);
 
@@ -618,5 +745,9 @@ client.on(
     }
   }
 );
+
+// =========================
+// LOGIN
+// =========================
 
 client.login(TOKEN);
