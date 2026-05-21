@@ -10,121 +10,77 @@ const Database =
 const db =
   new Database("db.db");
 
-// =========================
-// TABLE
-// =========================
-
 db.exec(`
-
 CREATE TABLE IF NOT EXISTS permissions (
   userId TEXT PRIMARY KEY
 );
-
 `);
 
-// =========================
-// COMMAND
-// =========================
-
 const command =
-
   new SlashCommandBuilder()
 
     .setName("permission")
 
     .setDescription(
-      "Gestiona permisos del bot"
+      "Gestiona permisos"
     )
 
     .setDefaultMemberPermissions(
       PermissionFlagsBits.Administrator
     )
 
-    // =====================
-    // ADD
-    // =====================
-
     .addSubcommand(sub =>
-
       sub
-
         .setName("add")
-
-        .setDescription(
-          "Da acceso a un usuario"
-        )
-
+        .setDescription("Da acceso")
         .addUserOption(option =>
-
           option
-
             .setName("usuario")
-
-            .setDescription(
-              "Usuario"
-            )
-
+            .setDescription("Usuario")
             .setRequired(true)
         )
     )
 
-    // =====================
-    // REMOVE
-    // =====================
-
     .addSubcommand(sub =>
-
       sub
-
         .setName("remove")
-
-        .setDescription(
-          "Quita acceso a un usuario"
-        )
-
+        .setDescription("Quita acceso")
         .addUserOption(option =>
-
           option
-
             .setName("usuario")
-
-            .setDescription(
-              "Usuario"
-            )
-
+            .setDescription("Usuario")
             .setRequired(true)
         )
     )
 
-    // =====================
-    // LIST
-    // =====================
+    .addSubcommand(sub =>
+      sub
+        .setName("list")
+        .setDescription("Lista usuarios")
+    )
 
     .addSubcommand(sub =>
-
       sub
-
-        .setName("list")
-
-        .setDescription(
-          "Muestra usuarios autorizados"
+        .setName("removerole")
+        .setDescription("Quita un rol")
+        .addUserOption(option =>
+          option
+            .setName("usuario")
+            .setDescription("Usuario")
+            .setRequired(true)
+        )
+        .addRoleOption(option =>
+          option
+            .setName("rol")
+            .setDescription("Rol")
+            .setRequired(true)
         )
     );
 
-// =========================
-// EXECUTE
-// =========================
-
-async function execute(
-  interaction
-) {
+async function execute(interaction) {
 
   const sub =
     interaction.options.getSubcommand();
-
-  // =====================
-  // ADD
-  // =====================
 
   if (sub === "add") {
 
@@ -134,40 +90,22 @@ async function execute(
       );
 
     db.prepare(`
-      INSERT OR REPLACE INTO permissions (
-        userId
-      )
+      INSERT OR REPLACE INTO permissions
+      (userId)
       VALUES (?)
     `).run(user.id);
 
-    const embed =
-
-      new EmbedBuilder()
-
-        .setTitle(
-          "Permiso agregado"
-        )
-
-        .setDescription(
-          `${user.tag} ahora puede usar el bot.`
-        )
-
-        .setColor(
-          0x57F287
-        );
-
     return interaction.reply({
-
-      embeds: [embed],
-
-      ephemeral: true
-
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Permiso agregado")
+          .setDescription(
+            `${user.tag} ahora puede usar el bot.`
+          )
+          .setColor(0x57F287)
+      ]
     });
   }
-
-  // =====================
-  // REMOVE
-  // =====================
 
   if (sub === "remove") {
 
@@ -181,34 +119,17 @@ async function execute(
       WHERE userId = ?
     `).run(user.id);
 
-    const embed =
-
-      new EmbedBuilder()
-
-        .setTitle(
-          "Permiso removido"
-        )
-
-        .setDescription(
-          `${user.tag} ya no puede usar el bot.`
-        )
-
-        .setColor(
-          0xED4245
-        );
-
     return interaction.reply({
-
-      embeds: [embed],
-
-      ephemeral: true
-
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Permiso removido")
+          .setDescription(
+            `${user.tag} ya no puede usar el bot.`
+          )
+          .setColor(0xED4245)
+      ]
     });
   }
-
-  // =====================
-  // LIST
-  // =====================
 
   if (sub === "list") {
 
@@ -218,54 +139,75 @@ async function execute(
         FROM permissions
       `).all();
 
-    if (!rows.length) {
-
-      return interaction.reply({
-
-        content:
-          "No hay usuarios autorizados.",
-
-        ephemeral: true
-      });
-    }
-
     let users = "";
 
     for (const row of rows) {
-
-      users +=
-        `<@${row.userId}>\n`;
+      users += `<@${row.userId}>\n`;
     }
 
-    const embed =
-
-      new EmbedBuilder()
-
-        .setTitle(
-          "Usuarios autorizados"
-        )
-
-        .setDescription(
-          users
-        )
-
-        .setColor(
-          0x5865F2
-        );
+    if (!users)
+      users = "Sin usuarios.";
 
     return interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(
+            "Usuarios autorizados"
+          )
+          .setDescription(users)
+          .setColor(0x5865F2)
+      ]
+    });
+  }
 
-      embeds: [embed],
+  if (sub === "removerole") {
 
-      ephemeral: true
+    const member =
+      interaction.options.getMember(
+        "usuario"
+      );
 
+    const role =
+      interaction.options.getRole(
+        "rol"
+      );
+
+    if (!member) {
+
+      return interaction.reply({
+        content:
+          "Usuario no encontrado."
+      });
+    }
+
+    if (
+      !member.roles.cache.has(
+        role.id
+      )
+    ) {
+
+      return interaction.reply({
+        content:
+          "Ese usuario no tiene ese rol."
+      });
+    }
+
+    await member.roles.remove(
+      role.id
+    );
+
+    return interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Rol removido")
+          .setDescription(
+            `Se removió ${role} a ${member.user.tag}.`
+          )
+          .setColor(0xED4245)
+      ]
     });
   }
 }
-
-// =========================
-// EXPORT
-// =========================
 
 module.exports = {
   command,
