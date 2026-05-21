@@ -1,4 +1,4 @@
-  const {
+const {
   Client,
   GatewayIntentBits,
   SlashCommandBuilder,
@@ -48,7 +48,9 @@ CREATE TABLE IF NOT EXISTS permissions (
 );
 `);
 
-function hasPermission(userId) {
+function hasPermission(
+  userId
+) {
 
   const row =
     db.prepare(`
@@ -85,7 +87,11 @@ app.listen(3000);
 
 const commands = [
 
-  transcribe.command,
+  transcribe.transcribeCommand,
+
+  transcribe.addCommand,
+
+  transcribe.removeCommand,
 
   permission.command,
 
@@ -166,6 +172,10 @@ async function registerCommands() {
     ),
     { body: commands }
   );
+
+  console.log(
+    "Commands synced."
+  );
 }
 
 client.once(
@@ -195,8 +205,11 @@ client.on(
       )
       VALUES (?, ?, ?)
     `).run(
+
       message.author.id,
+
       message.content,
+
       Date.now()
     );
   }
@@ -230,13 +243,38 @@ client.on(
         if (!isAdmin) {
 
           return interaction.reply({
+
             content:
               "Solo administradores.",
+
             ephemeral: true
+
           });
         }
 
         return permission.execute(
+          interaction
+        );
+      }
+
+      if (
+
+        interaction.commandName ===
+        "transcribe"
+
+        ||
+
+        interaction.commandName ===
+        "addtranscribe"
+
+        ||
+
+        interaction.commandName ===
+        "removetranscribe"
+
+      ) {
+
+        return transcribe.execute(
           interaction
         );
       }
@@ -257,20 +295,13 @@ client.on(
       ) {
 
         return interaction.reply({
+
           content:
             "No tienes permisos.",
+
           ephemeral: true
+
         });
-      }
-
-      if (
-        interaction.commandName ===
-        "transcribe"
-      ) {
-
-        return transcribe.execute(
-          interaction
-        );
       }
 
       if (
@@ -314,6 +345,7 @@ client.on(
           level = "Medio";
 
         return interaction.reply({
+
           embeds: [
 
             new EmbedBuilder()
@@ -337,36 +369,49 @@ client.on(
               .addFields(
 
                 {
-                  name: "Usuario",
-                  value: user.tag,
+                  name:
+                    "Usuario",
+
+                  value:
+                    user.tag,
+
                   inline: true
                 },
 
                 {
-                  name: "Score",
+                  name:
+                    "Score",
+
                   value:
                     `${score}/100`,
+
                   inline: true
                 },
 
                 {
-                  name: "Nivel",
+                  name:
+                    "Nivel",
+
                   value:
                     level,
+
                   inline: true
                 },
 
                 {
                   name:
                     "Mensajes analizados",
+
                   value:
                     `${messages.length}`,
+
                   inline: true
                 }
 
               )
 
           ]
+
         });
       }
 
@@ -405,6 +450,7 @@ client.on(
         }
 
         return interaction.reply({
+
           embeds: [
 
             new EmbedBuilder()
@@ -422,30 +468,37 @@ client.on(
                 {
                   name:
                     "Usuario 1",
+
                   value:
                     u1.tag,
+
                   inline: true
                 },
 
                 {
                   name:
                     "Usuario 2",
+
                   value:
                     u2.tag,
+
                   inline: true
                 },
 
                 {
                   name:
                     "Similitud",
+
                   value:
                     `${similarity}%`,
+
                   inline: true
                 }
 
               )
 
           ]
+
         });
       }
 
@@ -467,6 +520,7 @@ client.on(
           `).all(user.id);
 
         return interaction.reply({
+
           embeds: [
 
             new EmbedBuilder()
@@ -488,30 +542,37 @@ client.on(
                 {
                   name:
                     "Usuario",
+
                   value:
                     user.tag,
+
                   inline: true
                 },
 
                 {
                   name:
                     "ID",
+
                   value:
                     user.id,
+
                   inline: true
                 },
 
                 {
                   name:
                     "Mensajes",
+
                   value:
                     `${messages.length}`,
+
                   inline: true
                 }
 
               )
 
           ]
+
         });
       }
 
@@ -522,12 +583,15 @@ client.on(
       console.error(err);
 
       return interaction.reply({
+
         content:
           "Ocurrió un error.",
+
         ephemeral: true
+
       });
     }
   }
 );
 
-client.login(TOKEN);                
+client.login(TOKEN);
