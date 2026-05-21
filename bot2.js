@@ -3,31 +3,17 @@ const {
 } = require("discord.js");
 
 const command =
-
   new SlashCommandBuilder()
-
     .setName("transcribe")
-
-    .setDescription(
-      "Hace que el bot escriba un mensaje"
-    )
-
+    .setDescription("Hace que el bot escriba")
     .addStringOption(option =>
-
       option
-
         .setName("texto")
-
-        .setDescription(
-          "Texto"
-        )
-
+        .setDescription("Texto")
         .setRequired(true)
     );
 
-async function execute(
-  interaction
-) {
+async function execute(interaction) {
 
   const text =
     interaction.options.getString(
@@ -35,17 +21,11 @@ async function execute(
     );
 
   await interaction.reply({
-
-    content:
-      "Mensaje enviado.",
-
+    content: "Mensaje enviado.",
     ephemeral: true
-
   });
 
-  await interaction.channel.send(
-    text
-  );
+  await interaction.channel.send(text);
 }
 
 module.exports = {
