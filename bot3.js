@@ -4,17 +4,30 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const Database = require("better-sqlite3");
+const Database =
+  require("better-sqlite3");
 
-const db = new Database("db.db");
+const db =
+  new Database("db.db");
+
+// =========================
+// TABLE
+// =========================
 
 db.exec(`
+
 CREATE TABLE IF NOT EXISTS permissions (
   userId TEXT PRIMARY KEY
 );
+
 `);
 
+// =========================
+// COMMAND
+// =========================
+
 const command =
+
   new SlashCommandBuilder()
 
     .setName("permission")
@@ -27,50 +40,91 @@ const command =
       PermissionFlagsBits.Administrator
     )
 
+    // =====================
+    // ADD
+    // =====================
+
     .addSubcommand(sub =>
+
       sub
+
         .setName("add")
+
         .setDescription(
           "Da acceso a un usuario"
         )
+
         .addUserOption(option =>
+
           option
+
             .setName("usuario")
-            .setDescription("Usuario")
+
+            .setDescription(
+              "Usuario"
+            )
+
             .setRequired(true)
         )
     )
 
+    // =====================
+    // REMOVE
+    // =====================
+
     .addSubcommand(sub =>
+
       sub
+
         .setName("remove")
+
         .setDescription(
           "Quita acceso a un usuario"
         )
+
         .addUserOption(option =>
+
           option
+
             .setName("usuario")
-            .setDescription("Usuario")
+
+            .setDescription(
+              "Usuario"
+            )
+
             .setRequired(true)
         )
     )
 
+    // =====================
+    // LIST
+    // =====================
+
     .addSubcommand(sub =>
+
       sub
+
         .setName("list")
+
         .setDescription(
-          "Muestra la lista de usuarios autorizados"
+          "Muestra usuarios autorizados"
         )
     );
 
-async function execute(interaction) {
+// =========================
+// EXECUTE
+// =========================
+
+async function execute(
+  interaction
+) {
 
   const sub =
     interaction.options.getSubcommand();
 
-  // =========================
+  // =====================
   // ADD
-  // =========================
+  // =====================
 
   if (sub === "add") {
 
@@ -87,6 +141,7 @@ async function execute(interaction) {
     `).run(user.id);
 
     const embed =
+
       new EmbedBuilder()
 
         .setTitle(
@@ -97,17 +152,22 @@ async function execute(interaction) {
           `${user.tag} ahora puede usar el bot.`
         )
 
-        .setColor(0x57F287);
+        .setColor(
+          0x57F287
+        );
 
     return interaction.reply({
+
       embeds: [embed],
+
       ephemeral: true
+
     });
   }
 
-  // =========================
+  // =====================
   // REMOVE
-  // =========================
+  // =====================
 
   if (sub === "remove") {
 
@@ -122,6 +182,7 @@ async function execute(interaction) {
     `).run(user.id);
 
     const embed =
+
       new EmbedBuilder()
 
         .setTitle(
@@ -132,57 +193,79 @@ async function execute(interaction) {
           `${user.tag} ya no puede usar el bot.`
         )
 
-        .setColor(0xED4245);
+        .setColor(
+          0xED4245
+        );
 
     return interaction.reply({
+
       embeds: [embed],
+
       ephemeral: true
+
     });
   }
 
-  // =========================
+  // =====================
   // LIST
-  // =========================
+  // =====================
 
   if (sub === "list") {
 
-    const rows = db.prepare(`
-      SELECT * FROM permissions
-    `).all();
+    const rows =
+      db.prepare(`
+        SELECT *
+        FROM permissions
+      `).all();
 
     if (!rows.length) {
 
       return interaction.reply({
+
         content:
           "No hay usuarios autorizados.",
+
         ephemeral: true
       });
     }
 
-    let text = "";
+    let users = "";
 
     for (const row of rows) {
 
-      text += `<@${row.userId}>\n`;
+      users +=
+        `<@${row.userId}>\n`;
     }
 
     const embed =
+
       new EmbedBuilder()
 
         .setTitle(
           "Usuarios autorizados"
         )
 
-        .setDescription(text)
+        .setDescription(
+          users
+        )
 
-        .setColor(0x5865F2);
+        .setColor(
+          0x5865F2
+        );
 
     return interaction.reply({
+
       embeds: [embed],
+
       ephemeral: true
+
     });
   }
 }
+
+// =========================
+// EXPORT
+// =========================
 
 module.exports = {
   command,
