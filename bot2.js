@@ -30,7 +30,16 @@ async function execute(interaction) {
       "texto"
     );
 
+  // RESPUESTA INVISIBLE
+
   await interaction.reply({
+    content: "Mensaje enviado.",
+    ephemeral: true
+  });
+
+  // MENSAJE REAL DEL BOT
+
+  await interaction.channel.send({
     content: text
   });
 }
