@@ -1,9 +1,9 @@
 const {
-  SlashCommandBuilder,
-  PermissionFlagsBits
+  SlashCommandBuilder
 } = require("discord.js");
 
 const command =
+
   new SlashCommandBuilder()
 
     .setName("transcribe")
@@ -12,36 +12,40 @@ const command =
       "Hace que el bot escriba un mensaje"
     )
 
-    .setDefaultMemberPermissions(
-      PermissionFlagsBits.Administrator
-    )
-
     .addStringOption(option =>
+
       option
+
         .setName("texto")
-        .setDescription("Texto")
+
+        .setDescription(
+          "Texto"
+        )
+
         .setRequired(true)
     );
 
-async function execute(interaction) {
+async function execute(
+  interaction
+) {
 
   const text =
     interaction.options.getString(
       "texto"
     );
 
-  // RESPUESTA INVISIBLE
-
   await interaction.reply({
-    content: "Mensaje enviado.",
+
+    content:
+      "Mensaje enviado.",
+
     ephemeral: true
+
   });
 
-  // MENSAJE REAL DEL BOT
-
-  await interaction.channel.send({
-    content: text
-  });
+  await interaction.channel.send(
+    text
+  );
 }
 
 module.exports = {
