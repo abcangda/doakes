@@ -14,15 +14,25 @@ const Database = require("better-sqlite3");
 const transcribe = require("./bot2");
 const permission = require("./bot3");
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+// =========================
+// ENV
+// =========================
 
-const db = new Database("db.db");
+const TOKEN =
+  process.env.TOKEN;
+
+const CLIENT_ID =
+  process.env.CLIENT_ID;
+
+const GUILD_ID =
+  process.env.GUILD_ID;
 
 // =========================
 // DATABASE
 // =========================
+
+const db =
+  new Database("db.db");
 
 db.exec(`
 
@@ -62,7 +72,10 @@ function hasPermission(userId) {
   return row ? true : false;
 }
 
-function analyzeUser(user, messages) {
+function analyzeUser(
+  user,
+  messages
+) {
 
   let score = 0;
 
@@ -76,6 +89,10 @@ function analyzeUser(user, messages) {
       Date.now()
       - user.createdTimestamp
     ) / 86400000;
+
+  // =====================
+  // ACCOUNT AGE
+  // =====================
 
   if (ageDays < 7) {
 
@@ -95,6 +112,10 @@ function analyzeUser(user, messages) {
     );
   }
 
+  // =====================
+  // MESSAGE COUNT
+  // =====================
+
   if (totalMessages > 100) {
 
     score += 20;
@@ -104,7 +125,13 @@ function analyzeUser(user, messages) {
     );
   }
 
-  if (user.username.length < 4) {
+  // =====================
+  // USERNAME
+  // =====================
+
+  if (
+    user.username.length < 4
+  ) {
 
     score += 15;
 
@@ -112,6 +139,10 @@ function analyzeUser(user, messages) {
       "Username sospechoso."
     );
   }
+
+  // =====================
+  // LIMITS
+  // =====================
 
   if (score > 100)
     score = 100;
@@ -136,13 +167,19 @@ function analyzeUser(user, messages) {
 // CLIENT
 // =========================
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
-});
+const client =
+  new Client({
+
+    intents: [
+
+      GatewayIntentBits.Guilds,
+
+      GatewayIntentBits.GuildMessages,
+
+      GatewayIntentBits.MessageContent
+
+    ]
+  });
 
 // =========================
 // EXPRESS
@@ -159,13 +196,13 @@ app.get("/", (req, res) => {
 
 app.get("/graph", (req, res) => {
 
-  const edges = db.prepare(`
+  const rows = db.prepare(`
     SELECT *
     FROM edges
     ORDER BY weight DESC
   `).all();
 
-  res.json(edges);
+  res.json(rows);
 });
 
 app.listen(3000, () => {
@@ -182,6 +219,7 @@ app.listen(3000, () => {
 const commands = [
 
   transcribe.command,
+
   permission.command,
 
   new SlashCommandBuilder()
@@ -193,9 +231,15 @@ const commands = [
     )
 
     .addUserOption(option =>
+
       option
+
         .setName("usuario")
-        .setDescription("Usuario")
+
+        .setDescription(
+          "Usuario"
+        )
+
         .setRequired(true)
     ),
 
@@ -208,16 +252,28 @@ const commands = [
     )
 
     .addUserOption(option =>
+
       option
+
         .setName("u1")
-        .setDescription("Usuario 1")
+
+        .setDescription(
+          "Usuario 1"
+        )
+
         .setRequired(true)
     )
 
     .addUserOption(option =>
+
       option
+
         .setName("u2")
-        .setDescription("Usuario 2")
+
+        .setDescription(
+          "Usuario 2"
+        )
+
         .setRequired(true)
     ),
 
@@ -230,9 +286,15 @@ const commands = [
     )
 
     .addUserOption(option =>
+
       option
+
         .setName("usuario")
-        .setDescription("Usuario")
+
+        .setDescription(
+          "Usuario"
+        )
+
         .setRequired(true)
     )
 
@@ -244,9 +306,10 @@ const commands = [
 
 async function registerCommands() {
 
-  const rest = new REST({
-    version: "10"
-  }).setToken(TOKEN);
+  const rest =
+    new REST({
+      version: "10"
+    }).setToken(TOKEN);
 
   // LIMPIAR GLOBALES
 
@@ -289,7 +352,7 @@ client.once(
 );
 
 // =========================
-// MESSAGE LOGGING
+// MESSAGE LOGGER
 // =========================
 
 client.on(
@@ -328,11 +391,12 @@ client.on(
 
     try {
 
-      const member =
-        interaction.member;
+      // =====================
+      // PERMISSIONS
+      // =====================
 
       const isAdmin =
-        member.permissions.has(
+        interaction.memberPermissions?.has(
           PermissionFlagsBits.Administrator
         );
 
@@ -342,7 +406,7 @@ client.on(
         );
 
       // =====================
-      // ADMIN ONLY
+      // PERMISSION COMMAND
       // =====================
 
       if (
@@ -350,7 +414,9 @@ client.on(
         "permission"
       ) {
 
-        if (!isAdmin) {
+        if (
+          isAdmin !== true
+        ) {
 
           return interaction.reply({
             content:
@@ -365,18 +431,24 @@ client.on(
       }
 
       // =====================
-      // OTHER COMMANDS
+      // BLOCK USERS
       // =====================
 
       if (
-        !isAdmin &&
-        !permitted
+
+        isAdmin !== true &&
+
+        permitted !== true
+
       ) {
 
         return interaction.reply({
+
           content:
             "No tienes permisos para usar el bot.",
+
           ephemeral: true
+
         });
       }
 
@@ -453,20 +525,24 @@ client.on(
             .addFields(
 
               {
-                name: "Usuario",
-                value: user.tag,
+                name:
+                  "Usuario",
+                value:
+                  user.tag,
                 inline: true
               },
 
               {
-                name: "Score",
+                name:
+                  "Score",
                 value:
                   `${analysis.score}/100`,
                 inline: true
               },
 
               {
-                name: "Nivel",
+                name:
+                  "Nivel",
                 value:
                   analysis.level,
                 inline: true
@@ -521,13 +597,17 @@ client.on(
         let reasons = [];
 
         if (
+
           u1.username
             .slice(0, 4)
             .toLowerCase()
+
           ===
+
           u2.username
             .slice(0, 4)
             .toLowerCase()
+
         ) {
 
           similarity += 30;
@@ -546,10 +626,15 @@ client.on(
             )
             VALUES (?, ?, ?, ?, ?)
           `).run(
+
             u1.id,
+
             u2.id,
+
             30,
+
             "username_similarity",
+
             Date.now()
           );
         }
@@ -738,9 +823,12 @@ client.on(
       }
 
       return interaction.reply({
+
         content:
           "Ocurrió un error.",
+
         ephemeral: true
+
       });
     }
   }
