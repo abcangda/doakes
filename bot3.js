@@ -77,7 +77,9 @@ const command =
         )
     );
 
-async function execute(interaction) {
+async function execute(
+  interaction
+) {
 
   const sub =
     interaction.options.getSubcommand();
@@ -96,14 +98,25 @@ async function execute(interaction) {
     `).run(user.id);
 
     return interaction.reply({
+
       embeds: [
+
         new EmbedBuilder()
-          .setTitle("Permiso agregado")
+
+          .setTitle(
+            "Permiso agregado"
+          )
+
           .setDescription(
             `${user.tag} ahora puede usar el bot.`
           )
-          .setColor(0x57F287)
+
+          .setColor(
+            0x57F287
+          )
+
       ]
+
     });
   }
 
@@ -120,14 +133,25 @@ async function execute(interaction) {
     `).run(user.id);
 
     return interaction.reply({
+
       embeds: [
+
         new EmbedBuilder()
-          .setTitle("Permiso removido")
+
+          .setTitle(
+            "Permiso removido"
+          )
+
           .setDescription(
             `${user.tag} ya no puede usar el bot.`
           )
-          .setColor(0xED4245)
+
+          .setColor(
+            0xED4245
+          )
+
       ]
+
     });
   }
 
@@ -142,21 +166,32 @@ async function execute(interaction) {
     let users = "";
 
     for (const row of rows) {
-      users += `<@${row.userId}>\n`;
+
+      users +=
+        `<@${row.userId}>\n`;
     }
 
     if (!users)
       users = "Sin usuarios.";
 
     return interaction.reply({
+
       embeds: [
+
         new EmbedBuilder()
+
           .setTitle(
             "Usuarios autorizados"
           )
+
           .setDescription(users)
-          .setColor(0x5865F2)
+
+          .setColor(
+            0x5865F2
+          )
+
       ]
+
     });
   }
 
@@ -175,8 +210,12 @@ async function execute(interaction) {
     if (!member) {
 
       return interaction.reply({
+
         content:
-          "Usuario no encontrado."
+          "Usuario no encontrado.",
+
+        ephemeral: true
+
       });
     }
 
@@ -187,8 +226,12 @@ async function execute(interaction) {
     ) {
 
       return interaction.reply({
+
         content:
-          "Ese usuario no tiene ese rol."
+          "Ese usuario no tiene ese rol.",
+
+        ephemeral: true
+
       });
     }
 
@@ -196,15 +239,35 @@ async function execute(interaction) {
       role.id
     );
 
-    return interaction.reply({
+    await interaction.reply({
+
+      content:
+        "Rol removido.",
+
+      ephemeral: true
+
+    });
+
+    await interaction.channel.send({
+
       embeds: [
+
         new EmbedBuilder()
-          .setTitle("Rol removido")
+
+          .setTitle(
+            "Rol removido"
+          )
+
           .setDescription(
             `Se removió ${role} a ${member.user.tag}.`
           )
-          .setColor(0xED4245)
+
+          .setColor(
+            0xED4245
+          )
+
       ]
+
     });
   }
 }
