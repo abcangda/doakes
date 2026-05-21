@@ -53,6 +53,14 @@ const command =
             .setDescription("Usuario")
             .setRequired(true)
         )
+    )
+
+    .addSubcommand(sub =>
+      sub
+        .setName("list")
+        .setDescription(
+          "Muestra la lista de usuarios autorizados"
+        )
     );
 
 async function execute(interaction) {
@@ -60,15 +68,19 @@ async function execute(interaction) {
   const sub =
     interaction.options.getSubcommand();
 
-  const user =
-    interaction.options.getUser(
-      "usuario"
-    );
+  // =========================
+  // ADD
+  // =========================
 
   if (sub === "add") {
 
+    const user =
+      interaction.options.getUser(
+        "usuario"
+      );
+
     db.prepare(`
-      INSERT OR IGNORE INTO permissions (
+      INSERT OR REPLACE INTO permissions (
         userId
       )
       VALUES (?)
@@ -93,7 +105,16 @@ async function execute(interaction) {
     });
   }
 
+  // =========================
+  // REMOVE
+  // =========================
+
   if (sub === "remove") {
+
+    const user =
+      interaction.options.getUser(
+        "usuario"
+      );
 
     db.prepare(`
       DELETE FROM permissions
@@ -112,6 +133,49 @@ async function execute(interaction) {
         )
 
         .setColor(0xED4245);
+
+    return interaction.reply({
+      embeds: [embed],
+      ephemeral: true
+    });
+  }
+
+  // =========================
+  // LIST
+  // =========================
+
+  if (sub === "list") {
+
+    const rows = db.prepare(`
+      SELECT * FROM permissions
+    `).all();
+
+    if (!rows.length) {
+
+      return interaction.reply({
+        content:
+          "No hay usuarios autorizados.",
+        ephemeral: true
+      });
+    }
+
+    let text = "";
+
+    for (const row of rows) {
+
+      text += `<@${row.userId}>\n`;
+    }
+
+    const embed =
+      new EmbedBuilder()
+
+        .setTitle(
+          "Usuarios autorizados"
+        )
+
+        .setDescription(text)
+
+        .setColor(0x5865F2);
 
     return interaction.reply({
       embeds: [embed],
