@@ -4,13 +4,8 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const OWNER_IDS = [
-
-  "1305030009681088592",
-
-  "1400202137903960146"
-
-];
+const OWNER_ID =
+  "1305030009681088592";
 
 const command =
   new SlashCommandBuilder()
@@ -18,7 +13,7 @@ const command =
     .setName("ban")
 
     .setDescription(
-      "Banea un usuario"
+      "Elimina un usuario"
     )
 
     .setDefaultMemberPermissions(
@@ -39,23 +34,15 @@ const command =
         .setRequired(false)
     );
 
-async function execute(
-  interaction
-) {
+async function execute(interaction) {
 
   if (
-    !OWNER_IDS.includes(
-      interaction.user.id
-    )
+    interaction.user.id !== OWNER_ID
   ) {
 
     return interaction.reply({
-
-      content:
-        "No puedes usar este comando.",
-
+      content: "No autorizado.",
       ephemeral: true
-
     });
   }
 
@@ -77,12 +64,8 @@ async function execute(
   if (!member) {
 
     return interaction.reply({
-
-      content:
-        "Usuario no encontrado.",
-
+      content: "Usuario no encontrado.",
       ephemeral: true
-
     });
   }
 
@@ -91,12 +74,8 @@ async function execute(
   });
 
   await interaction.reply({
-
-    content:
-      "Usuario baneado.",
-
+    content: "Usuario eliminado.",
     ephemeral: true
-
   });
 
   await interaction.channel.send({
@@ -104,33 +83,23 @@ async function execute(
     embeds: [
 
       new EmbedBuilder()
-
-        .setTitle(
-          "Sistema de moderación"
-        )
-
+        .setColor(0x0A0A0A)
+        .setTitle("TARGET ELIMINATED")
         .setDescription(
           `Homelander asesinó a ${user.tag}.`
         )
-
         .addFields({
-
           name: "Razón",
-
           value: reason
-
         })
-
         .setImage(
           "https://cdn.discordapp.com/attachments/1494932411702710312/1507467664933519440/image0.gif?ex=6a12022a&is=6a10b0aa&hm=9338b5fbf6feaa55d7b580f890c4a81f185ff916efbeb949045e996042d06577&"
         )
-
-        .setColor(
-          0xED4245
-        )
+        .setFooter({
+          text: "Homelander Enforcement System"
+        })
 
     ]
-
   });
 }
 
