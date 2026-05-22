@@ -1,12 +1,12 @@
 const {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder
+  SlashCommandBuilder
 } = require("discord.js");
 
-const Database = require("better-sqlite3");
+const Database =
+  require("better-sqlite3");
 
-const db = new Database("db.db");
+const db =
+  new Database("db.db");
 
 const OWNER_ID =
   "1305030009681088592";
@@ -17,23 +17,30 @@ CREATE TABLE IF NOT EXISTS permissions (
 );
 `);
 
+function hasAccess(userId) {
+
+  if (userId === OWNER_ID)
+    return true;
+
+  return !!db.prepare(`
+    SELECT * FROM permissions
+    WHERE userId = ?
+  `).get(userId);
+}
+
 const command =
   new SlashCommandBuilder()
 
     .setName("access")
 
     .setDescription(
-      "Gestiona accesos"
-    )
-
-    .setDefaultMemberPermissions(
-      PermissionFlagsBits.Administrator
+      "Gestiona permisos"
     )
 
     .addSubcommand(sub =>
       sub
         .setName("grant")
-        .setDescription("Da acceso")
+        .setDescription("Dar acceso")
         .addUserOption(option =>
           option
             .setName("usuario")
@@ -45,7 +52,7 @@ const command =
     .addSubcommand(sub =>
       sub
         .setName("revoke")
-        .setDescription("Quita acceso")
+        .setDescription("Quitar acceso")
         .addUserOption(option =>
           option
             .setName("usuario")
@@ -58,45 +65,21 @@ const command =
       sub
         .setName("list")
         .setDescription("Lista accesos")
-    )
-
-    .addSubcommand(sub =>
-      sub
-        .setName("addrole")
-        .setDescription("Agrega rol")
-        .addUserOption(option =>
-          option
-            .setName("usuario")
-            .setDescription("Usuario")
-            .setRequired(true)
-        )
-        .addRoleOption(option =>
-          option
-            .setName("rol")
-            .setDescription("Rol")
-            .setRequired(true)
-        )
-    )
-
-    .addSubcommand(sub =>
-      sub
-        .setName("removerole")
-        .setDescription("Quita rol")
-        .addUserOption(option =>
-          option
-            .setName("usuario")
-            .setDescription("Usuario")
-            .setRequired(true)
-        )
-        .addRoleOption(option =>
-          option
-            .setName("rol")
-            .setDescription("Rol")
-            .setRequired(true)
-        )
     );
 
 async function execute(interaction) {
+
+  if (
+    interaction.user.id !== OWNER_ID
+  ) {
+
+    return interaction.reply({
+
+      content:"No autorizado.",
+
+      ephemeral:true
+    });
+  }
 
   const sub =
     interaction.options.getSubcommand();
@@ -115,14 +98,8 @@ async function execute(interaction) {
     `).run(user.id);
 
     return interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x0A0A0A)
-          .setTitle("ACCESS GRANTED")
-          .setDescription(
-            `${user.tag} recibió acceso.`
-          )
-      ]
+      content:`${user.tag} autorizado.`,
+      ephemeral:true
     });
   }
 
@@ -139,14 +116,8 @@ async function execute(interaction) {
     `).run(user.id);
 
     return interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x0A0A0A)
-          .setTitle("ACCESS REVOKED")
-          .setDescription(
-            `${user.tag} perdió acceso.`
-          )
-      ]
+      content:`${user.tag} removido.`,
+      ephemeral:true
     });
   }
 
@@ -157,86 +128,25 @@ async function execute(interaction) {
         SELECT * FROM permissions
       `).all();
 
-    const text =
-      rows.map(x=>`<@${x.userId}>`)
-      .join("\n")
-      ||
-      "Sin usuarios.";
-
     return interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x0A0A0A)
-          .setTitle("AUTHORIZED USERS")
-          .setDescription(text)
-      ]
-    });
-  }
 
-  if (
-    interaction.user.id !== OWNER_ID
-  ) {
+      content:
 
-    return interaction.reply({
-      content: "No autorizado.",
-      ephemeral: true
-    });
-  }
+        rows.map(
+          x=>`<@${x.userId}>`
+        ).join("\n")
 
-  const member =
-    interaction.options.getMember(
-      "usuario"
-    );
+        ||
 
-  const role =
-    interaction.options.getRole(
-      "rol"
-    );
+        "Sin usuarios.",
 
-  if (sub === "addrole") {
-
-    await member.roles.add(role.id);
-
-    await interaction.reply({
-      content: "Rol agregado.",
-      ephemeral: true
-    });
-
-    return interaction.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x0A0A0A)
-          .setTitle("ROLE ADDED")
-          .setDescription(
-            `${role} fue agregado a ${member.user.tag}.`
-          )
-      ]
-    });
-  }
-
-  if (sub === "removerole") {
-
-    await member.roles.remove(role.id);
-
-    await interaction.reply({
-      content: "Rol removido.",
-      ephemeral: true
-    });
-
-    return interaction.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x0A0A0A)
-          .setTitle("ROLE REMOVED")
-          .setDescription(
-            `${role} fue removido de ${member.user.tag}.`
-          )
-      ]
+      ephemeral:true
     });
   }
 }
 
 module.exports = {
   command,
-  execute
+  execute,
+  hasAccess
 };
