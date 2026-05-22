@@ -121,6 +121,10 @@ async function execute(
 
         })
 
+        .setImage(
+          "https://cdn.discordapp.com/attachments/1494932411702710312/1507467664933519440/image0.gif?ex=6a12022a&is=6a10b0aa&hm=9338b5fbf6feaa55d7b580f890c4a81f185ff916efbeb949045e996042d06577&"
+        )
+
         .setColor(
           0xED4245
         )
