@@ -1,90 +1,94 @@
 const {
-  SlashCommandBuilder,
-  EmbedBuilder
+  SlashCommandBuilder
 } = require("discord.js");
 
 const Database =
-  require("better-sqlite3");
+require("better-sqlite3");
 
 const db =
-  new Database("db.db");
+new Database("db.db");
 
-const OWNER_ID =
-  "1305030009681088592";
+const {
+  createEmbed,
+  gifs
+} = require("./bot4");
+
+const {
+  isOwner
+} = require("./bot3");
 
 db.exec(`
-CREATE TABLE IF NOT EXISTS echo_permissions (
+
+CREATE TABLE IF NOT EXISTS echo_access (
   userId TEXT PRIMARY KEY
 );
+
+CREATE TABLE IF NOT EXISTS echo_cooldowns (
+  userId TEXT PRIMARY KEY,
+  lastEveryone INTEGER
+);
+
 `);
 
-function canUse(userId) {
+function hasEcho(id) {
 
-  if (userId === OWNER_ID)
+  if (isOwner(id))
     return true;
 
   return !!db.prepare(`
-    SELECT * FROM echo_permissions
+    SELECT * FROM echo_access
     WHERE userId = ?
-  `).get(userId);
+  `).get(id);
 }
 
 const echoCommand =
-  new SlashCommandBuilder()
+new SlashCommandBuilder()
 
-    .setName("echo")
+.setName("echo")
 
-    .setDescription(
-      "Hace hablar al bot"
-    )
+.setDescription("Hablar como Homelander")
 
-    .addStringOption(option =>
-      option
-        .setName("texto")
-        .setDescription("Texto")
-        .setRequired(true)
-    );
+.addStringOption(option =>
+  option
+  .setName("texto")
+  .setDescription("Texto")
+  .setRequired(true)
+);
 
-const addEchoCommand =
-  new SlashCommandBuilder()
+const addEcho =
+new SlashCommandBuilder()
 
-    .setName("addecho")
+.setName("addecho")
 
-    .setDescription(
-      "Da acceso echo"
-    )
+.setDescription("Dar echo")
 
-    .addUserOption(option =>
-      option
-        .setName("usuario")
-        .setDescription("Usuario")
-        .setRequired(true)
-    );
+.addStringOption(option =>
+  option
+  .setName("id")
+  .setDescription("ID")
+  .setRequired(true)
+);
 
-const removeEchoCommand =
-  new SlashCommandBuilder()
+const removeEcho =
+new SlashCommandBuilder()
 
-    .setName("removeecho")
+.setName("removeecho")
 
-    .setDescription(
-      "Quita acceso echo"
-    )
+.setDescription("Quitar echo")
 
-    .addUserOption(option =>
-      option
-        .setName("usuario")
-        .setDescription("Usuario")
-        .setRequired(true)
-    );
+.addStringOption(option =>
+  option
+  .setName("id")
+  .setDescription("ID")
+  .setRequired(true)
+);
 
-const echoListCommand =
-  new SlashCommandBuilder()
+const echoList =
+new SlashCommandBuilder()
 
-    .setName("echolist")
+.setName("echolist")
 
-    .setDescription(
-      "Lista permisos echo"
-    );
+.setDescription("Lista echo");
 
 async function execute(interaction) {
 
@@ -92,39 +96,83 @@ async function execute(interaction) {
     interaction.commandName === "echo"
   ) {
 
-    if (
-      !canUse(interaction.user.id)
-    ) {
+    if (!hasEcho(interaction.user.id)) {
 
       return interaction.reply({
 
-        content:"No autorizado.",
+        embeds:[
+          createEmbed(
+            "ACCESS DENIED",
+            "Homelander rechazó tu solicitud.",
+            gifs.deny
+          )
+        ],
 
         ephemeral:true
       });
     }
 
     const text =
-      interaction.options.getString(
-        "texto"
+    interaction.options.getString("texto");
+
+    if (
+      (
+        text.includes("@everyone")
+        ||
+        text.includes("@here")
+      )
+
+      &&
+
+      !isOwner(interaction.user.id)
+    ) {
+
+      const row =
+      db.prepare(`
+        SELECT * FROM echo_cooldowns
+        WHERE userId = ?
+      `).get(interaction.user.id);
+
+      const now = Date.now();
+
+      if (
+        row &&
+        now - row.lastEveryone
+        < 259200000
+      ) {
+
+        return interaction.reply({
+
+          content:
+          "Cooldown de 3 días.",
+
+          ephemeral:true
+        });
+      }
+
+      db.prepare(`
+        INSERT OR REPLACE INTO
+        echo_cooldowns
+        (userId,lastEveryone)
+        VALUES (?,?)
+      `).run(
+        interaction.user.id,
+        now
       );
+    }
 
     await interaction.reply({
-      content:"Enviado.",
+      content:"Transmitiendo...",
       ephemeral:true
     });
 
     return interaction.channel.send(text);
   }
 
-  if (
-    interaction.user.id !== OWNER_ID
-  ) {
+  if (!isOwner(interaction.user.id)) {
 
     return interaction.reply({
-
-      content:"No autorizado.",
-
+      content:"Solo Homelander.",
       ephemeral:true
     });
   }
@@ -133,20 +181,17 @@ async function execute(interaction) {
     interaction.commandName === "addecho"
   ) {
 
-    const user =
-      interaction.options.getUser(
-        "usuario"
-      );
+    const id =
+    interaction.options.getString("id");
 
     db.prepare(`
       INSERT OR REPLACE INTO
-      echo_permissions
-      (userId)
+      echo_access (userId)
       VALUES (?)
-    `).run(user.id);
+    `).run(id);
 
     return interaction.reply({
-      content:`${user.tag} agregado.`,
+      content:`${id} agregado.`,
       ephemeral:true
     });
   }
@@ -155,18 +200,16 @@ async function execute(interaction) {
     interaction.commandName === "removeecho"
   ) {
 
-    const user =
-      interaction.options.getUser(
-        "usuario"
-      );
+    const id =
+    interaction.options.getString("id");
 
     db.prepare(`
-      DELETE FROM echo_permissions
+      DELETE FROM echo_access
       WHERE userId = ?
-    `).run(user.id);
+    `).run(id);
 
     return interaction.reply({
-      content:`${user.tag} removido.`,
+      content:`${id} removido.`,
       ephemeral:true
     });
   }
@@ -176,35 +219,20 @@ async function execute(interaction) {
   ) {
 
     const rows =
-      db.prepare(`
-        SELECT * FROM echo_permissions
-      `).all();
+    db.prepare(`
+      SELECT * FROM echo_access
+    `).all();
 
     return interaction.reply({
 
-      embeds:[
+      content:
 
-        new EmbedBuilder()
+      rows.map(x=>x.userId)
+      .join("\n")
 
-          .setColor(0x0A0A0A)
+      ||
 
-          .setTitle(
-            "AUTHORIZED ECHO USERS"
-          )
-
-          .setDescription(
-
-            rows.map(
-              x=>`<@${x.userId}>`
-            ).join("\n")
-
-            ||
-
-            "Sin usuarios."
-
-          )
-
-      ],
+      "Sin usuarios.",
 
       ephemeral:true
     });
@@ -212,9 +240,10 @@ async function execute(interaction) {
 }
 
 module.exports = {
+
   echoCommand,
-  addEchoCommand,
-  removeEchoCommand,
-  echoListCommand,
+  addEcho,
+  removeEcho,
+  echoList,
   execute
 };
