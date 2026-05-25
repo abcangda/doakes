@@ -1,129 +1,61 @@
 const {
-  SlashCommandBuilder,
   EmbedBuilder
 } = require("discord.js");
 
-const Database =
-  require("better-sqlite3");
+const gifs = {
 
-const db =
-  new Database("db.db");
+  danger:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1507467664933519440/image0.gif",
 
-const OWNER_ID =
-  "1305030009681088592";
+  success:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1507487015065878558/image0.gif",
 
-function hasAccess(userId) {
+  deny:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1507467086182613173/image0.gif",
 
-  if (userId === OWNER_ID)
-    return true;
+  sad:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1507486803471503502/image0.gif",
 
-  return !!db.prepare(`
-    SELECT * FROM permissions
-    WHERE userId = ?
-  `).get(userId);
-}
+  stronger:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1508297999359676507/image0.gif",
 
-const command =
-  new SlashCommandBuilder()
+  milk:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1508297999644754070/image1.gif",
 
-    .setName("ban")
+  disgust:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1508297999938359386/image2.gif",
 
-    .setDescription(
-      "Banear usuario"
-    )
+  roof:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1508298000638677053/image3.gif",
 
-    .addUserOption(option =>
-      option
-        .setName("usuario")
-        .setDescription("Usuario")
-        .setRequired(true)
-    )
+  sarcastic:
+  "https://cdn.discordapp.com/attachments/1494932411702710312/1508298001335058522/image4.gif"
+};
 
-    .addStringOption(option =>
-      option
-        .setName("razon")
-        .setDescription("Razón")
-        .setRequired(false)
-    );
+function createEmbed(
+  title,
+  desc,
+  gif = gifs.success
+) {
 
-async function execute(interaction) {
+  return new EmbedBuilder()
 
-  if (
-    !hasAccess(interaction.user.id)
-  ) {
+    .setColor(0x0A0A0A)
 
-    return interaction.reply({
+    .setTitle(title)
 
-      content:"No autorizado.",
+    .setDescription(desc)
 
-      ephemeral:true
-    });
-  }
+    .setImage(gif)
 
-  const user =
-    interaction.options.getUser(
-      "usuario"
-    );
+    .setFooter({
+      text:"Vought International"
+    })
 
-  const reason =
-    interaction.options.getString(
-      "razon"
-    ) || "Sin razón.";
-
-  const member =
-    interaction.guild.members.cache.get(
-      user.id
-    );
-
-  if (!member) {
-
-    return interaction.reply({
-
-      content:"Usuario no encontrado.",
-
-      ephemeral:true
-    });
-  }
-
-  await member.ban({
-    reason
-  });
-
-  await interaction.reply({
-    content:"Usuario eliminado.",
-    ephemeral:true
-  });
-
-  await interaction.channel.send({
-
-    embeds:[
-
-      new EmbedBuilder()
-
-        .setColor(0x0A0A0A)
-
-        .setTitle(
-          "TARGET ELIMINATED"
-        )
-
-        .setDescription(
-          `Homelander asesinó a ${user.tag}.`
-        )
-
-        .addFields({
-          name:"Razón",
-          value:reason
-        })
-
-        .setImage(
-          "https://cdn.discordapp.com/attachments/1494932411702710312/1507467664933519440/image0.gif?ex=6a12022a&is=6a10b0aa&hm=9338b5fbf6feaa55d7b580f890c4a81f185ff916efbeb949045e996042d06577&"
-        )
-
-    ]
-  });
+    .setTimestamp();
 }
 
 module.exports = {
-  command,
-  execute
+  gifs,
+  createEmbed
 };
