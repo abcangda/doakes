@@ -3,120 +3,118 @@ const {
 } = require("discord.js");
 
 const Database =
-  require("better-sqlite3");
+require("better-sqlite3");
 
 const db =
-  new Database("db.db");
+new Database("db.db");
 
-const OWNER_ID =
-  "1305030009681088592";
+const OWNER_IDS = [
+  "1305030009681088592",
+  "1400202137903960146"
+];
 
 db.exec(`
-CREATE TABLE IF NOT EXISTS permissions (
+
+CREATE TABLE IF NOT EXISTS mod_access (
   userId TEXT PRIMARY KEY
 );
+
 `);
 
-function hasAccess(userId) {
+function isOwner(id) {
+  return OWNER_IDS.includes(id);
+}
 
-  if (userId === OWNER_ID)
+function hasMod(id) {
+
+  if (isOwner(id))
     return true;
 
   return !!db.prepare(`
-    SELECT * FROM permissions
+    SELECT * FROM mod_access
     WHERE userId = ?
-  `).get(userId);
+  `).get(id);
 }
 
 const command =
-  new SlashCommandBuilder()
+new SlashCommandBuilder()
 
-    .setName("access")
+.setName("access")
 
-    .setDescription(
-      "Gestiona permisos"
-    )
+.setDescription("Sistema access")
 
-    .addSubcommand(sub =>
-      sub
-        .setName("grant")
-        .setDescription("Dar acceso")
-        .addUserOption(option =>
-          option
-            .setName("usuario")
-            .setDescription("Usuario")
-            .setRequired(true)
-        )
-    )
+.addSubcommand(sub =>
+  sub
+  .setName("grant")
+  .setDescription("Dar acceso")
+  .addStringOption(option =>
+    option
+    .setName("id")
+    .setDescription("ID")
+    .setRequired(true)
+  )
+)
 
-    .addSubcommand(sub =>
-      sub
-        .setName("revoke")
-        .setDescription("Quitar acceso")
-        .addUserOption(option =>
-          option
-            .setName("usuario")
-            .setDescription("Usuario")
-            .setRequired(true)
-        )
-    )
+.addSubcommand(sub =>
+  sub
+  .setName("revoke")
+  .setDescription("Quitar acceso")
+  .addStringOption(option =>
+    option
+    .setName("id")
+    .setDescription("ID")
+    .setRequired(true)
+  )
+)
 
-    .addSubcommand(sub =>
-      sub
-        .setName("list")
-        .setDescription("Lista accesos")
-    );
+.addSubcommand(sub =>
+  sub
+  .setName("list")
+  .setDescription("Ver lista")
+);
 
 async function execute(interaction) {
 
-  if (
-    interaction.user.id !== OWNER_ID
-  ) {
+  if (!isOwner(interaction.user.id)) {
 
     return interaction.reply({
-
-      content:"No autorizado.",
-
+      content:"Acceso denegado.",
       ephemeral:true
     });
   }
 
   const sub =
-    interaction.options.getSubcommand();
+  interaction.options.getSubcommand();
 
   if (sub === "grant") {
 
-    const user =
-      interaction.options.getUser(
-        "usuario"
-      );
+    const id =
+    interaction.options.getString("id");
 
     db.prepare(`
-      INSERT OR REPLACE INTO permissions
-      (userId)
+      INSERT OR REPLACE INTO
+      mod_access (userId)
       VALUES (?)
-    `).run(user.id);
+    `).run(id);
 
     return interaction.reply({
-      content:`${user.tag} autorizado.`,
+      content:`${id} autorizado.`,
       ephemeral:true
     });
   }
 
   if (sub === "revoke") {
 
-    const user =
-      interaction.options.getUser(
-        "usuario"
-      );
+    const id =
+    interaction.options.getString("id");
 
     db.prepare(`
-      DELETE FROM permissions
+      DELETE FROM mod_access
       WHERE userId = ?
-    `).run(user.id);
+    `).run(id);
 
     return interaction.reply({
-      content:`${user.tag} removido.`,
+      content:`${id} removido.`,
       ephemeral:true
     });
   }
@@ -124,21 +122,20 @@ async function execute(interaction) {
   if (sub === "list") {
 
     const rows =
-      db.prepare(`
-        SELECT * FROM permissions
-      `).all();
+    db.prepare(`
+      SELECT * FROM mod_access
+    `).all();
 
     return interaction.reply({
 
       content:
 
-        rows.map(
-          x=>`<@${x.userId}>`
-        ).join("\n")
+      rows.map(x=>x.userId)
+      .join("\n")
 
-        ||
+      ||
 
-        "Sin usuarios.",
+      "Sin usuarios.",
 
       ephemeral:true
     });
@@ -148,5 +145,6 @@ async function execute(interaction) {
 module.exports = {
   command,
   execute,
-  hasAccess
+  hasMod,
+  isOwner
 };
