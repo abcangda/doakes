@@ -1,0 +1,23 @@
+{
+  "users": {},
+  "teams": {},
+  "wars": {},
+  "marriages": {},
+  "economy": {},
+  "inventory": {},
+  "shop": {},
+  "events": {},
+  "echo": {
+    "authorized": [],
+    "logs": []
+  },
+  "logs": {
+    "moderation": [],
+    "economy": [],
+    "wars": [],
+    "social": []
+  },
+  "seasons": {
+    "current": 1
+  }
+}
