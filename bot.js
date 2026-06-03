@@ -1,450 +1,148 @@
-const {
-  Client,
-  GatewayIntentBits,
-  SlashCommandBuilder,
-  REST,
-  Routes
-} = require("discord.js");
+const fs = require("fs");
+const { Client, GatewayIntentBits, Partials, Collection } = require("discord.js");
+require("dotenv").config();
 
-const express =
-require("express");
+const OWNER_ID = process.env.OWNER_ID;
 
-const Database =
-require("better-sqlite3");
-
-const db =
-new Database("db.db");
-
-const {
-  createEmbed,
-  gifs
-} = require("./bot4");
-
-const echo =
-require("./bot2");
-
-const access =
-require("./bot3");
-
-const {
-  hasMod
-} = require("./bot3");
-
-const TOKEN =
-process.env.TOKEN;
-
-const CLIENT_ID =
-process.env.CLIENT_ID;
-
-const GUILD_ID =
-process.env.GUILD_ID;
-
-db.exec(`
-
-CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  userId TEXT,
-  content TEXT,
-  createdAt INTEGER
-);
-
-`);
-
-const client =
-new Client({
-
-  intents:[
-
+const client = new Client({
+  intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
-
-  ]
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates
+  ],
+  partials: [Partials.Channel]
 });
 
-const app =
-express();
+client.commands = new Collection();
 
-app.get("/",(req,res)=>{
-  res.send("Homelander online.");
-});
+/* =========================
+   DATABASE CORE
+========================= */
 
-app.listen(3000);
+const DB_PATH = "./database.json";
 
-const commands = [
-
-  echo.echoCommand,
-  echo.addEcho,
-  echo.removeEcho,
-  echo.echoList,
-
-  access.command,
-
-  new SlashCommandBuilder()
-
-  .setName("scan")
-
-  .setDescription("Escaneo")
-
-  .addUserOption(option =>
-    option
-    .setName("usuario")
-    .setDescription("Usuario")
-    .setRequired(true)
-  ),
-
-  new SlashCommandBuilder()
-
-  .setName("file")
-
-  .setDescription("Expediente")
-
-  .addUserOption(option =>
-    option
-    .setName("usuario")
-    .setDescription("Usuario")
-    .setRequired(true)
-  ),
-
-  new SlashCommandBuilder()
-
-  .setName("intel")
-
-  .setDescription("Comparar usuarios")
-
-  .addUserOption(option =>
-    option
-    .setName("u1")
-    .setDescription("Usuario")
-    .setRequired(true)
-  )
-
-  .addUserOption(option =>
-    option
-    .setName("u2")
-    .setDescription("Usuario")
-    .setRequired(true)
-  ),
-
-  new SlashCommandBuilder()
-
-  .setName("ban")
-
-  .setDescription("Eliminar objetivo")
-
-  .addUserOption(option =>
-    option
-    .setName("usuario")
-    .setDescription("Usuario")
-    .setRequired(true)
-  ),
-
-  new SlashCommandBuilder()
-
-  .setName("laser")
-
-  .setDescription("Laser vision")
-
-  .addUserOption(option =>
-    option
-    .setName("usuario")
-    .setDescription("Usuario")
-    .setRequired(true)
-  )
-
-].map(x=>x.toJSON());
-
-async function registerCommands() {
-
-  const rest =
-  new REST({
-    version:"10"
-  }).setToken(TOKEN);
-
-  await rest.put(
-    Routes.applicationCommands(
-      CLIENT_ID
-    ),
-    { body:[] }
-  );
-
-  await rest.put(
-
-    Routes.applicationGuildCommands(
-      CLIENT_ID,
-      GUILD_ID
-    ),
-
-    { body:commands }
-  );
+function loadDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({
+      users: {},
+      teams: {},
+      wars: {},
+      marriages: {},
+      economy: {},
+      inventory: {},
+      shop: {},
+      events: {},
+      echo: { authorized: [], logs: [] },
+      logs: {},
+      seasons: { current: 1 }
+    }, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
 }
 
-client.once("ready", async ()=>{
+function saveDB(db) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+}
 
-  console.log(
-    `${client.user.tag} online`
-  );
+let db = loadDB();
 
-  await registerCommands();
-});
+/* =========================
+   USER SYSTEM
+========================= */
 
-client.on("messageCreate", msg=>{
-
-  if (msg.author.bot)
-    return;
-
-  db.prepare(`
-    INSERT INTO messages
-    (userId,content,createdAt)
-    VALUES (?,?,?)
-  `).run(
-    msg.author.id,
-    msg.content,
-    Date.now()
-  );
-});
-
-client.on(
-"interactionCreate",
-async interaction=>{
-
-  if (!interaction.isChatInputCommand())
-    return;
-
-  try {
-
-    if (
-      [
-        "echo",
-        "addecho",
-        "removeecho",
-        "echolist"
-      ]
-      .includes(interaction.commandName)
-    ) {
-      return echo.execute(interaction);
-    }
-
-    if (
-      interaction.commandName === "access"
-    ) {
-      return access.execute(interaction);
-    }
-
-    if (
-      interaction.commandName === "scan"
-    ) {
-
-      const user =
-      interaction.options.getUser(
-        "usuario"
-      );
-
-      return interaction.reply({
-
-        embeds:[
-
-          createEmbed(
-            "VOUGHT THREAT ANALYSIS",
-            `${user.tag} fue analizado.`,
-            gifs.stronger
-          )
-
-        ]
-      });
-    }
-
-    if (
-      interaction.commandName === "file"
-    ) {
-
-      const user =
-      interaction.options.getUser(
-        "usuario"
-      );
-
-      const count =
-      db.prepare(`
-        SELECT COUNT(*) as total
-        FROM messages
-        WHERE userId = ?
-      `).get(user.id);
-
-      return interaction.reply({
-
-        embeds:[
-
-          createEmbed(
-            "VOUGHT USER FILE",
-            `
-Usuario:
-${user.tag}
-
-Mensajes:
-${count.total}
-
-ID:
-${user.id}
-            `,
-            gifs.milk
-          )
-
-        ]
-      });
-    }
-
-    if (
-      interaction.commandName === "intel"
-    ) {
-
-      const u1 =
-      interaction.options.getUser("u1");
-
-      const u2 =
-      interaction.options.getUser("u2");
-
-      let score =
-      Math.floor(
-        Math.random()*100
-      );
-
-      return interaction.reply({
-
-        embeds:[
-
-          createEmbed(
-            "VOUGHT INTELLIGENCE",
-            `
-${u1.tag}
-vs
-${u2.tag}
-
-Coincidencia:
-${score}%
-            `,
-            score >= 70
-            ? gifs.danger
-            : gifs.disgust
-          )
-
-        ]
-      });
-    }
-
-    if (
-      interaction.commandName === "ban"
-    ) {
-
-      if (
-        !hasMod(interaction.user.id)
-      ) {
-
-        return interaction.reply({
-
-          embeds:[
-
-            createEmbed(
-              "ACCESS DENIED",
-              "Homelander rechazó tu solicitud.",
-              gifs.deny
-            )
-
-          ],
-
-          ephemeral:true
-        });
-      }
-
-      const user =
-      interaction.options.getUser(
-        "usuario"
-      );
-
-      const member =
-      await interaction.guild.members
-      .fetch(user.id);
-
-      await member.ban();
-
-      await interaction.reply({
-        content:"Objetivo eliminado.",
-        ephemeral:true
-      });
-
-      return interaction.channel.send({
-
-        embeds:[
-
-          createEmbed(
-            "TARGET ELIMINATED",
-            `Homelander asesinó a ${user.tag}.`,
-            gifs.danger
-          )
-
-        ]
-      });
-    }
-
-    if (
-      interaction.commandName === "laser"
-    ) {
-
-      if (
-        !hasMod(interaction.user.id)
-      ) {
-
-        return interaction.reply({
-
-          content:"Acceso denegado.",
-
-          ephemeral:true
-        });
-      }
-
-      const user =
-      interaction.options.getUser(
-        "usuario"
-      );
-
-      const member =
-      await interaction.guild.members
-      .fetch(user.id);
-
-      await member.setNickname(
-        "Killed by Homelander"
-      );
-
-      return interaction.reply({
-
-        embeds:[
-
-          createEmbed(
-            "LASER VISION",
-            `${user.tag} fue destruido.`,
-            gifs.danger
-          )
-
-        ]
-      });
-    }
-
+function getUser(id) {
+  if (!db.users[id]) {
+    db.users[id] = {
+      xp: 0,
+      level: 1,
+      prestige: 0,
+      coins: 0,
+      bank: 0,
+      reputation: 0,
+      messages: 0,
+      voice: 0,
+      team: null,
+      marriage: null,
+      createdAt: Date.now()
+    };
   }
+  return db.users[id];
+}
 
-  catch(err) {
+function addCoins(id, amount) {
+  const u = getUser(id);
+  u.coins += amount;
+}
 
-    console.error(err);
+function addXP(id, amount) {
+  const u = getUser(id);
 
-    if (!interaction.replied) {
+  u.xp += amount;
 
-      interaction.reply({
+  let needed = u.level * 120;
 
-        content:"Error interno.",
+  if (u.xp >= needed) {
+    u.level++;
+    u.xp = 0;
 
-        ephemeral:true
-      });
+    u.coins += 1000;
+
+    if (u.level % 10 === 0) {
+      u.reputation += 2;
     }
   }
+}
+
+/* =========================
+   ACTIVITY SYSTEM
+========================= */
+
+function isValidMessage(content) {
+  if (!content) return false;
+  if (content.length < 2) return false;
+  if (/(\W)\1{5,}/g.test(content)) return false;
+  return true;
+}
+
+client.on("messageCreate", (message) => {
+  if (message.author.bot) return;
+
+  const user = getUser(message.author.id);
+
+  user.messages++;
+
+  if (isValidMessage(message.content)) {
+    addXP(message.author.id, 10);
+    addCoins(message.author.id, 5);
+  }
+
+  saveDB(db);
 });
 
-client.login(TOKEN);
+/* =========================
+   READY
+========================= */
+
+client.once("ready", () => {
+  console.log(`🤖 Homelander online as ${client.user.tag}`);
+});
+
+/* =========================
+   LOAD MODULES
+========================= */
+
+require("./bot2")(client, db, saveDB, getUser);
+require("./bot3")(client, db, saveDB, getUser);
+require("./bot4")(client, db, saveDB, getUser);
+require("./bot5")(client, db, saveDB, getUser);
+require("./bot6")(client, db, saveDB, getUser);
+require("./bot7")(client, db, saveDB, getUser);
+require("./bot8")(client, db, saveDB, getUser);
+require("./bot9")(client, db, saveDB, getUser);
+require("./bot10")(client, db, saveDB, getUser);
+
+/* ========================= */
+
+client.login(process.env.TOKEN);
