@@ -48,16 +48,16 @@ function getUser(id) {
 /* =========================
    LOAD MODULES
 ========================= */
-require("./bot2")(client, db, saveDB, getUser);
-require("./bot3")(client, db, saveDB, getUser);
-require("./bot4")(client, db, saveDB, getUser);
-require("./bot5")(client, db, saveDB, getUser);
-require("./bot6")(client, db, saveDB, getUser);
-require("./bot7")(client, db, saveDB, getUser);
-require("./bot8")(client, db, saveDB, getUser);
-require("./bot9")(client, db, saveDB, getUser);
-require("./bot10")(client, db, saveDB, getUser);
-require("./bot11")(client, db, saveDB, getUser);
+console.log("bot2:", typeof require("./bot2"));
+console.log("bot3:", typeof require("./bot3"));
+console.log("bot4:", typeof require("./bot4"));
+console.log("bot5:", typeof require("./bot5"));
+console.log("bot6:", typeof require("./bot6"));
+console.log("bot7:", typeof require("./bot7"));
+console.log("bot8:", typeof require("./bot8"));
+console.log("bot9:", typeof require("./bot9"));
+console.log("bot10:", typeof require("./bot10"));
+console.log("bot11:", typeof require("./bot11"));
 
 /* =========================
    READY
