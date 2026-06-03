@@ -1,17 +1,13 @@
 {
 "name": "homelander",
 "version": "1.0.0",
-"description": "Homelander - Sistema central de Texaz",
+"description": "Homelander Core System - Texaz",
 "main": "bot.js",
 "scripts": {
-"start": "node bot.js",
-"deploy": "node deploy-commands.js"
+"start": "node bot.js"
 },
 "dependencies": {
 "discord.js": "^14.21.0",
-"dotenv": "^16.6.1"
-},
-"engines": {
-"node": ">=18"
+"dotenv": "^16.5.0"
 }
 }
