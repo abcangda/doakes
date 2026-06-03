@@ -5,20 +5,10 @@
 "marriages": {},
 "economy": {},
 "inventory": {},
-"shop": {
-"premiumStock": {
-"customRole": 2,
-"teamRole": 2,
-"robux80": 2,
-"nitroBasic": 2,
-"nitro": 2,
-"deco": 2
-}
-},
+"shop": {},
 "events": {},
 "echo": {
 "authorized": [],
-"cooldowns": {},
 "logs": []
 },
 "logs": {
@@ -27,11 +17,10 @@
 "wars": [],
 "social": [],
 "owner": [],
-"echo": [],
-"events": []
+"echo": []
 },
 "seasons": {
 "current": 1,
-"startedAt": 0
+"started": 0
 }
 }
