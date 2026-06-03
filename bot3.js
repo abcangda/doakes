@@ -1,150 +1,100 @@
-const {
-  SlashCommandBuilder
-} = require("discord.js");
+module.exports = (client, db, saveDB, getUser) => {
+  const OWNER_ID = process.env.OWNER_ID;
 
-const Database =
-require("better-sqlite3");
-
-const db =
-new Database("db.db");
-
-const OWNER_IDS = [
-  "1305030009681088592",
-  "1400202137903960146"
-];
-
-db.exec(`
-
-CREATE TABLE IF NOT EXISTS mod_access (
-  userId TEXT PRIMARY KEY
-);
-
-`);
-
-function isOwner(id) {
-  return OWNER_IDS.includes(id);
-}
-
-function hasMod(id) {
-
-  if (isOwner(id))
-    return true;
-
-  return !!db.prepare(`
-    SELECT * FROM mod_access
-    WHERE userId = ?
-  `).get(id);
-}
-
-const command =
-new SlashCommandBuilder()
-
-.setName("access")
-
-.setDescription("Sistema access")
-
-.addSubcommand(sub =>
-  sub
-  .setName("grant")
-  .setDescription("Dar acceso")
-  .addStringOption(option =>
-    option
-    .setName("id")
-    .setDescription("ID")
-    .setRequired(true)
-  )
-)
-
-.addSubcommand(sub =>
-  sub
-  .setName("revoke")
-  .setDescription("Quitar acceso")
-  .addStringOption(option =>
-    option
-    .setName("id")
-    .setDescription("ID")
-    .setRequired(true)
-  )
-)
-
-.addSubcommand(sub =>
-  sub
-  .setName("list")
-  .setDescription("Ver lista")
-);
-
-async function execute(interaction) {
-
-  if (!isOwner(interaction.user.id)) {
-
-    return interaction.reply({
-      content:"Acceso denegado.",
-      ephemeral:true
-    });
+  function isOwner(id) {
+    return id === OWNER_ID;
   }
 
-  const sub =
-  interaction.options.getSubcommand();
-
-  if (sub === "grant") {
-
-    const id =
-    interaction.options.getString("id");
-
-    db.prepare(`
-      INSERT OR REPLACE INTO
-      mod_access (userId)
-      VALUES (?)
-    `).run(id);
-
-    return interaction.reply({
-      content:`${id} autorizado.`,
-      ephemeral:true
+  function log(action, data) {
+    if (!db.logs.owner) db.logs.owner = [];
+    db.logs.owner.push({
+      action,
+      data,
+      date: Date.now()
     });
+    saveDB(db);
   }
 
-  if (sub === "revoke") {
+  client.on("interactionCreate", (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
 
-    const id =
-    interaction.options.getString("id");
+    if (!isOwner(interaction.user.id)) {
+      return interaction.reply({ content: "❌ No autorizado.", ephemeral: true });
+    }
 
-    db.prepare(`
-      DELETE FROM mod_access
-      WHERE userId = ?
-    `).run(id);
+    const { commandName } = interaction;
 
-    return interaction.reply({
-      content:`${id} removido.`,
-      ephemeral:true
-    });
-  }
+    /* =========================
+       /owner coins
+    ========================= */
+    if (commandName === "owner_coins") {
+      const user = interaction.options.getUser("user");
+      const amount = interaction.options.getInteger("amount");
 
-  if (sub === "list") {
+      const u = getUser(user.id);
+      u.coins += amount;
 
-    const rows =
-    db.prepare(`
-      SELECT * FROM mod_access
-    `).all();
+      log("COINS_ADD", { user: user.id, amount });
 
-    return interaction.reply({
+      return interaction.reply(`💰 ${amount} coins añadidas a ${user.tag}`);
+    }
 
-      content:
+    /* =========================
+       /owner xp
+    ========================= */
+    if (commandName === "owner_xp") {
+      const user = interaction.options.getUser("user");
+      const amount = interaction.options.getInteger("amount");
 
-      rows.map(x=>x.userId)
-      .join("\n")
+      const u = getUser(user.id);
+      u.xp += amount;
 
-      ||
+      log("XP_ADD", { user: user.id, amount });
 
-      "Sin usuarios.",
+      return interaction.reply(`📈 ${amount} XP añadida a ${user.tag}`);
+    }
 
-      ephemeral:true
-    });
-  }
-}
+    /* =========================
+       /owner prestige
+    ========================= */
+    if (commandName === "owner_prestige") {
+      const user = interaction.options.getUser("user");
 
-module.exports = {
-  command,
-  execute,
-  hasMod,
-  isOwner
+      const u = getUser(user.id);
+      u.prestige += 1;
+
+      log("PRESTIGE_ADD", { user: user.id });
+
+      return interaction.reply(`👑 Prestige aumentado para ${user.tag}`);
+    }
+
+    /* =========================
+       /owner reset
+    ========================= */
+    if (commandName === "owner_reset") {
+      db.users = {};
+      saveDB(db);
+
+      log("RESET_ALL", { by: interaction.user.id });
+
+      return interaction.reply("⚠️ Base de datos reiniciada.");
+    }
+
+    /* =========================
+       /owner stock
+    ========================= */
+    if (commandName === "owner_stock") {
+      const item = interaction.options.getString("item");
+      const amount = interaction.options.getInteger("amount");
+
+      if (!db.shop[item]) db.shop[item] = { stock: 0 };
+
+      db.shop[item].stock = amount;
+      saveDB(db);
+
+      log("STOCK_SET", { item, amount });
+
+      return interaction.reply(`📦 Stock actualizado: ${item} = ${amount}`);
+    }
+  });
 };
