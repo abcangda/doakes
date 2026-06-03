@@ -1,61 +1,86 @@
-const {
-  EmbedBuilder
-} = require("discord.js");
+module.exports = (client, db, saveDB, getUser) => {
+  const OWNER_ID = process.env.OWNER_ID;
 
-const gifs = {
+  function logModeration(data) {
+    if (!db.logs.moderation) db.logs.moderation = [];
+    db.logs.moderation.push({ ...data, date: Date.now() });
+    saveDB(db);
+  }
 
-  danger:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1507467664933519440/image0.gif",
+  function isStaff(member) {
+    return member.permissions.has("ModerateMembers") || member.permissions.has("Administrator");
+  }
 
-  success:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1507487015065878558/image0.gif",
+  client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
 
-  deny:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1507467086182613173/image0.gif",
+    const { commandName, options, member, user, guild } = interaction;
 
-  sad:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1507486803471503502/image0.gif",
+    const target = options.getUser("user");
+    const reason = options.getString("reason") || "Sin razón";
 
-  stronger:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1508297999359676507/image0.gif",
+    if (!isStaff(member) && user.id !== OWNER_ID) {
+      return interaction.reply({ content: "❌ Sin permisos.", ephemeral: true });
+    }
 
-  milk:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1508297999644754070/image1.gif",
+    /* ================= BAN ================= */
+    if (commandName === "ban") {
+      const memberTarget = await guild.members.fetch(target.id).catch(() => null);
+      if (!memberTarget) return interaction.reply("Usuario no encontrado.");
 
-  disgust:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1508297999938359386/image2.gif",
+      await memberTarget.ban({ reason });
 
-  roof:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1508298000638677053/image3.gif",
+      logModeration({ type: "BAN", user: target.id, by: user.id, reason });
 
-  sarcastic:
-  "https://cdn.discordapp.com/attachments/1494932411702710312/1508298001335058522/image4.gif"
-};
+      return interaction.reply(`🔨 Usuario baneado: ${target.tag}`);
+    }
 
-function createEmbed(
-  title,
-  desc,
-  gif = gifs.success
-) {
+    /* ================= KICK ================= */
+    if (commandName === "kick") {
+      const memberTarget = await guild.members.fetch(target.id).catch(() => null);
+      if (!memberTarget) return interaction.reply("Usuario no encontrado.");
 
-  return new EmbedBuilder()
+      await memberTarget.kick(reason);
 
-    .setColor(0x0A0A0A)
+      logModeration({ type: "KICK", user: target.id, by: user.id, reason });
 
-    .setTitle(title)
+      return interaction.reply(`👢 Usuario expulsado: ${target.tag}`);
+    }
 
-    .setDescription(desc)
+    /* ================= MUTE ================= */
+    if (commandName === "mute") {
+      const memberTarget = await guild.members.fetch(target.id).catch(() => null);
+      if (!memberTarget) return interaction.reply("Usuario no encontrado.");
 
-    .setImage(gif)
+      await memberTarget.timeout(10 * 60 * 1000, reason);
 
-    .setFooter({
-      text:"Vought International"
-    })
+      logModeration({ type: "MUTE", user: target.id, by: user.id, reason });
 
-    .setTimestamp();
-}
+      return interaction.reply(`🔇 Usuario muteado: ${target.tag}`);
+    }
 
-module.exports = {
-  gifs,
-  createEmbed
+    /* ================= UNMUTE ================= */
+    if (commandName === "unmute") {
+      const memberTarget = await guild.members.fetch(target.id).catch(() => null);
+      if (!memberTarget) return interaction.reply("Usuario no encontrado.");
+
+      await memberTarget.timeout(null);
+
+      logModeration({ type: "UNMUTE", user: target.id, by: user.id });
+
+      return interaction.reply(`🔊 Usuario desmuteado: ${target.tag}`);
+    }
+
+    /* ================= LASER ================= */
+    if (commandName === "laser") {
+      const memberTarget = await guild.members.fetch(target.id).catch(() => null);
+      if (!memberTarget) return interaction.reply("Usuario no encontrado.");
+
+      await memberTarget.ban({ reason: "LASER EXECUTION" });
+
+      logModeration({ type: "LASER", user: target.id, by: user.id });
+
+      return interaction.reply(`💀 LASER ACTIVADO: ${target.tag} eliminado del sistema.`);
+    }
+  });
 };
