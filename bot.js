@@ -1,18 +1,7 @@
 require("dotenv").config();
 
-const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  Collection
-} = require("discord.js");
-
 const fs = require("fs");
-const path = require("path");
-
-/* =========================================
-   CLIENT
-========================================= */
+const { Client, GatewayIntentBits, Partials } = require("discord.js");
 
 const client = new Client({
   intents: [
@@ -30,31 +19,17 @@ const client = new Client({
   ]
 });
 
-/* =========================================
-   GLOBALS
-========================================= */
-
-const OWNER_ID = process.env.OWNER_ID;
-const DB_PATH = path.join(__dirname, "database.json");
-
-client.commands = new Collection();
-
-/* =========================================
-   DATABASE LOAD
-========================================= */
-
 let db = {};
 
 try {
-  db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-} catch (err) {
-  console.error("database.json corrupta o inexistente.");
-  process.exit(1);
+  db = JSON.parse(fs.readFileSync("./database.json", "utf8"));
+} catch {
+  db = {};
 }
 
-/* =========================================
-   ENSURE DATABASE STRUCTURE
-========================================= */
+function saveDB() {
+  fs.writeFileSync("./database.json", JSON.stringify(db, null, 2));
+}
 
 function ensureDatabase() {
   db.users ??= {};
@@ -63,23 +38,11 @@ function ensureDatabase() {
   db.marriages ??= {};
   db.economy ??= {};
   db.inventory ??= {};
-
-  db.shop ??= {
-    premiumStock: {
-      customRole: 2,
-      teamRole: 2,
-      robux80: 2,
-      nitroBasic: 2,
-      nitro: 2,
-      deco: 2
-    }
-  };
-
+  db.shop ??= {};
   db.events ??= {};
 
   db.echo ??= {
     authorized: [],
-    cooldowns: {},
     logs: []
   };
 
@@ -89,207 +52,161 @@ function ensureDatabase() {
     wars: [],
     social: [],
     owner: [],
-    echo: [],
-    events: []
+    echo: []
   };
 
   db.seasons ??= {
     current: 1,
-    startedAt: Date.now()
+    started: Date.now()
   };
+
+  saveDB();
 }
-
-ensureDatabase();
-
-/* =========================================
-   SAVE DB
-========================================= */
-
-function saveDB() {
-  try {
-    fs.writeFileSync(
-      DB_PATH,
-      JSON.stringify(db, null, 2)
-    );
-  } catch (err) {
-    console.error("Error guardando DB:", err);
-  }
-}
-
-/* =========================================
-   USER INITIALIZER
-========================================= */
 
 function getUser(id) {
   if (!db.users[id]) {
     db.users[id] = {
       id,
-
       coins: 0,
       bank: 0,
-
       xp: 0,
       level: 1,
       prestige: 0,
-
       reputation: 0,
-
       messages: 0,
       voice: 0,
-
-      wins: 0,
-      losses: 0,
-
-      duels: 0,
-      duelWins: 0,
-
-      warWins: 0,
-      warLosses: 0,
-
       team: null,
       marriage: null,
-
-      inventory: [],
-
-      achievements: [],
+      wins: 0,
+      losses: 0,
+      warsWon: 0,
+      warsLost: 0,
       badges: [],
-
+      achievements: [],
+      inventory: [],
       profilePrivate: false,
-
-      joinedAt: Date.now(),
-      lastMessage: 0,
-      lastVoice: 0,
-
-      stats: {
-        coinsEarned: 0,
-        coinsSpent: 0,
-        messagesSent: 0,
-        voiceMinutes: 0
-      },
-
+      joined: Date.now(),
+      lastRep: 0,
+      lastDaily: 0,
       mission: null
     };
+
+    saveDB();
   }
 
   return db.users[id];
 }
 
-/* =========================================
-   LOG SYSTEM
-========================================= */
+function getTeam(id) {
+  if (!db.teams[id]) {
+    db.teams[id] = {
+      id,
+      name: "",
+      leader: null,
+      coleaders: [],
+      members: [],
+      maxMembers: 7,
+      trophies: 0,
+      points: 0,
+      alliances: [],
+      rivals: [],
+      wins: 0,
+      losses: 0,
+      history: [],
+      created: Date.now()
+    };
 
-function addLog(category, data) {
-  if (!db.logs[category]) {
-    db.logs[category] = [];
+    saveDB();
   }
 
-  db.logs[category].push({
-    ...data,
-    timestamp: Date.now()
+  return db.teams[id];
+}
+
+function getMarriage(id) {
+  if (!db.marriages[id]) {
+    db.marriages[id] = {
+      id,
+      users: [],
+      created: Date.now(),
+      sharedCoins: 0,
+      sharedBank: 0,
+      sharedInventory: []
+    };
+
+    saveDB();
+  }
+
+  return db.marriages[id];
+}
+
+function addLog(type, data) {
+  if (!db.logs[type]) db.logs[type] = [];
+
+  db.logs[type].push({
+    date: Date.now(),
+    ...data
   });
 
-  if (db.logs[category].length > 5000) {
-    db.logs[category].shift();
+  if (db.logs[type].length > 5000) {
+    db.logs[type].shift();
   }
 
   saveDB();
 }
 
-/* =========================================
-   HELPERS
-========================================= */
+function getGlobalStats() {
+  const users = Object.values(db.users);
 
-function isOwner(id) {
-  return id === OWNER_ID;
+  return {
+    users: users.length,
+    coins: users.reduce((a, b) => a + (b.coins || 0), 0),
+    xp: users.reduce((a, b) => a + (b.xp || 0), 0),
+    messages: users.reduce((a, b) => a + (b.messages || 0), 0),
+    voice: users.reduce((a, b) => a + (b.voice || 0), 0)
+  };
 }
 
-function getSeason() {
-  return db.seasons.current;
-}
+ensureDatabase();
 
-function getActiveEvent() {
-  return db.events.active || null;
-}
-
-/* =========================================
-   EXPORTS FOR MODULES
-========================================= */
-
-const core = {
-  client,
-  db,
-  saveDB,
-  getUser,
-  addLog,
-  isOwner,
-  getSeason,
-  getActiveEvent
-};
-
-/* =========================================
-   MODULE LOADER
-========================================= */
-
-const modules = [
+[
   "./bot2",
   "./bot3",
   "./bot4",
   "./bot5",
-  "./bot6"
-];
-
-for (const file of modules) {
+  "./bot6",
+  "./bot7",
+  "./bot8",
+  "./bot9",
+  "./bot10"
+].forEach(file => {
   try {
     const mod = require(file);
 
     if (typeof mod === "function") {
-      mod(core);
-      console.log(`✓ Loaded ${file}`);
-    } else {
-      console.log(`✗ ${file} no exporta una función`);
+      mod(
+        client,
+        db,
+        saveDB,
+        getUser,
+        getTeam,
+        getMarriage,
+        addLog,
+        getGlobalStats
+      );
+
+      console.log(`${file} loaded`);
     }
   } catch (err) {
-    console.error(`✗ Error cargando ${file}`);
+    console.error(`Error loading ${file}`);
     console.error(err);
   }
-}
-
-/* =========================================
-   READY
-========================================= */
-
-client.once("clientReady", async () => {
-  console.log("================================");
-  console.log("HOMELANDER ONLINE");
-  console.log(`Bot: ${client.user.tag}`);
-  console.log(`Season: ${db.seasons.current}`);
-  console.log("================================");
 });
 
-/* =========================================
-   AUTO SAVE
-========================================= */
-
-setInterval(() => {
-  saveDB();
-}, 60000);
-
-/* =========================================
-   CRASH PROTECTION
-========================================= */
-
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION");
-  console.error(err);
+client.once("clientReady", () => {
+  console.log(`Homelander online: ${client.user.tag}`);
 });
 
-process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED REJECTION");
-  console.error(err);
-});
-
-/* =========================================
-   LOGIN
-========================================= */
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
 
 client.login(process.env.TOKEN);
