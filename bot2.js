@@ -1,249 +1,134 @@
-const {
-  SlashCommandBuilder
-} = require("discord.js");
+module.exports = (client, db, saveDB, getUser) => {
+  const OWNER_ID = process.env.OWNER_ID;
 
-const Database =
-require("better-sqlite3");
+  function isOwner(id) {
+    return id === OWNER_ID;
+  }
 
-const db =
-new Database("db.db");
+  function logEcho(action, data) {
+    if (!db.echo.logs) db.echo.logs = [];
+    db.echo.logs.push({
+      action,
+      data,
+      date: Date.now()
+    });
+    saveDB(db);
+  }
 
-const {
-  createEmbed,
-  gifs
-} = require("./bot4");
+  client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
 
-const {
-  isOwner
-} = require("./bot3");
+    const { commandName } = interaction;
 
-db.exec(`
+    /* =========================
+       /echo
+    ========================= */
+    if (commandName === "echo") {
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ content: "❌ No autorizado.", ephemeral: true });
+      }
 
-CREATE TABLE IF NOT EXISTS echo_access (
-  userId TEXT PRIMARY KEY
-);
+      const text = interaction.options.getString("text");
 
-CREATE TABLE IF NOT EXISTS echo_cooldowns (
-  userId TEXT PRIMARY KEY,
-  lastEveryone INTEGER
-);
-
-`);
-
-function hasEcho(id) {
-
-  if (isOwner(id))
-    return true;
-
-  return !!db.prepare(`
-    SELECT * FROM echo_access
-    WHERE userId = ?
-  `).get(id);
-}
-
-const echoCommand =
-new SlashCommandBuilder()
-
-.setName("echo")
-
-.setDescription("Hablar como Homelander")
-
-.addStringOption(option =>
-  option
-  .setName("texto")
-  .setDescription("Texto")
-  .setRequired(true)
-);
-
-const addEcho =
-new SlashCommandBuilder()
-
-.setName("addecho")
-
-.setDescription("Dar echo")
-
-.addStringOption(option =>
-  option
-  .setName("id")
-  .setDescription("ID")
-  .setRequired(true)
-);
-
-const removeEcho =
-new SlashCommandBuilder()
-
-.setName("removeecho")
-
-.setDescription("Quitar echo")
-
-.addStringOption(option =>
-  option
-  .setName("id")
-  .setDescription("ID")
-  .setRequired(true)
-);
-
-const echoList =
-new SlashCommandBuilder()
-
-.setName("echolist")
-
-.setDescription("Lista echo");
-
-async function execute(interaction) {
-
-  if (
-    interaction.commandName === "echo"
-  ) {
-
-    if (!hasEcho(interaction.user.id)) {
+      logEcho("ECHO_USED", { user: interaction.user.id, text });
 
       return interaction.reply({
-
-        embeds:[
-          createEmbed(
-            "ACCESS DENIED",
-            "Homelander rechazó tu solicitud.",
-            gifs.deny
-          )
-        ],
-
-        ephemeral:true
+        content: `📡 ECHO: ${text}`,
+        ephemeral: false
       });
     }
 
-    const text =
-    interaction.options.getString("texto");
+    /* =========================
+       /echo add
+    ========================= */
+    if (commandName === "echo_add") {
+      if (!isOwner(interaction.user.id)) return;
 
-    if (
-      (
-        text.includes("@everyone")
-        ||
-        text.includes("@here")
-      )
+      const user = interaction.options.getUser("user");
 
-      &&
-
-      !isOwner(interaction.user.id)
-    ) {
-
-      const row =
-      db.prepare(`
-        SELECT * FROM echo_cooldowns
-        WHERE userId = ?
-      `).get(interaction.user.id);
-
-      const now = Date.now();
-
-      if (
-        row &&
-        now - row.lastEveryone
-        < 259200000
-      ) {
-
-        return interaction.reply({
-
-          content:
-          "Cooldown de 3 días.",
-
-          ephemeral:true
-        });
+      if (!db.echo.authorized.includes(user.id)) {
+        db.echo.authorized.push(user.id);
+        saveDB(db);
       }
 
-      db.prepare(`
-        INSERT OR REPLACE INTO
-        echo_cooldowns
-        (userId,lastEveryone)
-        VALUES (?,?)
-      `).run(
-        interaction.user.id,
-        now
-      );
+      logEcho("ECHO_ADD", { user: user.id });
+
+      return interaction.reply(`✅ Usuario agregado a Echo: ${user.tag}`);
     }
 
-    await interaction.reply({
-      content:"Transmitiendo...",
-      ephemeral:true
-    });
+    /* =========================
+       /echo remove
+    ========================= */
+    if (commandName === "echo_remove") {
+      if (!isOwner(interaction.user.id)) return;
 
-    return interaction.channel.send(text);
-  }
+      const user = interaction.options.getUser("user");
 
-  if (!isOwner(interaction.user.id)) {
+      db.echo.authorized = db.echo.authorized.filter(u => u !== user.id);
+      saveDB(db);
 
-    return interaction.reply({
-      content:"Solo Homelander.",
-      ephemeral:true
-    });
-  }
+      logEcho("ECHO_REMOVE", { user: user.id });
 
-  if (
-    interaction.commandName === "addecho"
-  ) {
+      return interaction.reply(`❌ Usuario removido de Echo: ${user.tag}`);
+    }
 
-    const id =
-    interaction.options.getString("id");
+    /* =========================
+       /echo revoke
+    ========================= */
+    if (commandName === "echo_revoke") {
+      if (!isOwner(interaction.user.id)) return;
 
-    db.prepare(`
-      INSERT OR REPLACE INTO
-      echo_access (userId)
-      VALUES (?)
-    `).run(id);
+      db.echo.authorized = [];
+      saveDB(db);
 
-    return interaction.reply({
-      content:`${id} agregado.`,
-      ephemeral:true
-    });
-  }
+      logEcho("ECHO_REVOKE", { by: interaction.user.id });
 
-  if (
-    interaction.commandName === "removeecho"
-  ) {
+      return interaction.reply("🚫 Todo el acceso Echo ha sido revocado.");
+    }
 
-    const id =
-    interaction.options.getString("id");
+    /* =========================
+       /echo list
+    ========================= */
+    if (commandName === "echo_list") {
+      if (!isOwner(interaction.user.id)) return;
 
-    db.prepare(`
-      DELETE FROM echo_access
-      WHERE userId = ?
-    `).run(id);
+      const list = db.echo.authorized
+        .map(id => `<@${id}>`)
+        .join("\n") || "Vacío";
 
-    return interaction.reply({
-      content:`${id} removido.`,
-      ephemeral:true
-    });
-  }
+      return interaction.reply({
+        content: `📡 Echo Authorized Users:\n${list}`,
+        ephemeral: true
+      });
+    }
 
-  if (
-    interaction.commandName === "echolist"
-  ) {
+    /* =========================
+       /echo theseven
+    ========================= */
+    if (commandName === "echo_theseven") {
+      if (!isOwner(interaction.user.id)) return;
 
-    const rows =
-    db.prepare(`
-      SELECT * FROM echo_access
-    `).all();
+      const sevenRole = "1507504946088513536";
+      const guild = interaction.guild;
 
-    return interaction.reply({
+      const members = await guild.members.fetch();
 
-      content:
+      let added = 0;
 
-      rows.map(x=>x.userId)
-      .join("\n")
+      members.forEach(m => {
+        if (m.roles.cache.has(sevenRole)) {
+          if (!db.echo.authorized.includes(m.id)) {
+            db.echo.authorized.push(m.id);
+            added++;
+          }
+        }
+      });
 
-      ||
+      saveDB(db);
 
-      "Sin usuarios.",
+      logEcho("ECHO_THE_SEVEN", { added });
 
-      ephemeral:true
-    });
-  }
-}
-
-module.exports = {
-
-  echoCommand,
-  addEcho,
-  removeEcho,
-  echoList,
-  execute
+      return interaction.reply(`👑 Echo autorizado a The Seven: ${added} usuarios`);
+    }
+  });
 };
