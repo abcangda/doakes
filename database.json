@@ -1,23 +1,37 @@
 {
-  "users": {},
-  "teams": {},
-  "wars": {},
-  "marriages": {},
-  "economy": {},
-  "inventory": {},
-  "shop": {},
-  "events": {},
-  "echo": {
-    "authorized": [],
-    "logs": []
-  },
-  "logs": {
-    "moderation": [],
-    "economy": [],
-    "wars": [],
-    "social": []
-  },
-  "seasons": {
-    "current": 1
-  }
+"users": {},
+"teams": {},
+"wars": {},
+"marriages": {},
+"economy": {},
+"inventory": {},
+"shop": {
+"premiumStock": {
+"customRole": 2,
+"teamRole": 2,
+"robux80": 2,
+"nitroBasic": 2,
+"nitro": 2,
+"deco": 2
+}
+},
+"events": {},
+"echo": {
+"authorized": [],
+"cooldowns": {},
+"logs": []
+},
+"logs": {
+"moderation": [],
+"economy": [],
+"wars": [],
+"social": [],
+"owner": [],
+"echo": [],
+"events": []
+},
+"seasons": {
+"current": 1,
+"startedAt": 0
+}
 }
